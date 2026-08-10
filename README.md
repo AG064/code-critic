@@ -1,13 +1,15 @@
 # Code Critic
 
-Code Critic is a browser application for reviewing 100 to 500 lines of source code. It provides Quality and Security analysis through DeepSeek and keeps each request independent.
+Code Critic is a browser application that prepares 100 to 500 lines of source code for Quality or Security review. It accepts pasted code and uploaded source files, detects the programming language, validates the request, and returns a consistent input structure for later analysis through DeepSeek.
+
+The application supports C, C++, C#, CSS, Go, HTML, Java, JavaScript, Kotlin, PHP, Python, Ruby, Rust, shell scripts, SQL, Swift, and TypeScript.
 
 ## Setup
 
 Docker is the only required dependency.
 
 1. Copy `.env.example` to `.env`.
-2. Add a DeepSeek API key to `DEEPSEEK_API_KEY` in `.env`.
+2. Keep `DEEPSEEK_API_KEY` in the local `.env` file. Do not commit the key.
 3. Build and start the application:
 
    ```sh
@@ -20,10 +22,59 @@ The health endpoint is available at `http://localhost:27351/health`.
 
 ## Usage
 
-Paste source code or choose a source file, select an analysis type, adjust its parameters, and start the review. The generated report can be checked and edited before export.
+1. Paste source code into the editor or choose a source file.
+2. Select Quality or Security and adjust the displayed parameters.
+3. Select **Check input**.
+4. Review the detected language, line count, file name, and analysis type.
+
+Quality input includes strictness, naming convention, and code organization settings. Security input includes a framework, severity threshold, focus areas, and threat level.
+
+## Input validation
+
+Validation runs in the backend before any analysis request can be created. The backend rejects:
+
+- missing or blank code
+- code outside the 100 to 500 line range
+- input over 200,000 characters
+- unsupported analysis types or languages
+- invalid file names, parameters, or generation settings
+- binary content containing null bytes
+
+Uploaded request bodies are also limited to 600 KB. Validation errors identify the invalid field without returning stack traces or internal details.
+
+## Normalization
+
+Normalization makes equivalent input produce the same request structure:
+
+- Windows and old Mac line endings are converted to `LF`.
+- A leading byte order mark is removed.
+- A final line terminator does not count as an extra line.
+- Directory segments are removed from the supplied file name.
+- A supported file extension is used for language detection when present. Otherwise, detection uses language-specific code patterns.
+- Duplicate Security focus areas are removed while preserving their order.
+- Missing analysis settings receive documented defaults.
+
+The normalized result contains `analysis_type`, code content, detected language, line count, file name, analysis parameters, and generation parameters. Generation defaults are `temperature: 0.3`, `max_tokens: 1500`, and `top_p: 0.9`. These conservative values keep later review output focused while allowing limited variation.
+
+## Checks
+
+Run the backend test target and verify the complete Docker configuration:
+
+```sh
+docker build --target test -t code-critic-backend-test ./backend
+docker compose config
+docker compose build
+```
+
+The backend tests cover language detection, boundary validation, normalization defaults, malformed input, and HTTP error responses.
+
+## Privacy
+
+Code Critic has no accounts, sessions, database, or persistent code storage. The normalization endpoint does not write code to disk or send it to an external provider. Responses use `Cache-Control: no-store`.
 
 ## Additional features
 
 - Container health checks
-- No accounts, sessions, database, or persistent code storage
-- Plain text, Markdown, and HTML report exports
+- Client-side file size checks
+- A 12-second timeout for input checks
+- Structured validation error codes

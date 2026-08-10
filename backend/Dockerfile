@@ -8,6 +8,9 @@ COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build
 
+FROM build AS test
+RUN node --test dist/*.test.js dist/input/*.test.js
+
 FROM node:22-alpine AS production-dependencies
 WORKDIR /app
 COPY package*.json ./
