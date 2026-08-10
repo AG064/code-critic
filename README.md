@@ -1,6 +1,6 @@
 # Code Critic
 
-Code Critic is a browser application that prepares 100 to 500 lines of source code for Quality or Security review. It accepts pasted code and uploaded source files, detects the programming language, validates the request, and returns a consistent input structure for later analysis through DeepSeek.
+Code Critic validates 100 to 500 lines of pasted or uploaded source code for Quality or Security review.
 
 The application supports C, C++, C#, CSS, Go, HTML, Java, JavaScript, Kotlin, PHP, Python, Ruby, Rust, shell scripts, SQL, Swift, and TypeScript.
 
@@ -31,7 +31,7 @@ Quality input includes strictness, naming convention, and code organization sett
 
 ## Input validation
 
-Validation runs in the backend before any analysis request can be created. The backend rejects:
+The backend rejects:
 
 - missing or blank code
 - code outside the 100 to 500 line range
@@ -54,7 +54,7 @@ Normalization makes equivalent input produce the same request structure:
 - Duplicate Security focus areas are removed while preserving their order.
 - Missing analysis settings receive documented defaults.
 
-The normalized result contains `analysis_type`, code content, detected language, line count, file name, analysis parameters, and generation parameters. Generation defaults are `temperature: 0.3`, `max_tokens: 1500`, and `top_p: 0.9`. These conservative values keep later review output focused while allowing limited variation.
+The normalized result contains `analysis_type`, code content, detected language, line count, file name, analysis parameters, and generation parameters. Defaults are `temperature: 0.3`, `max_tokens: 1500`, and `top_p: 0.9`.
 
 ## Checks
 
