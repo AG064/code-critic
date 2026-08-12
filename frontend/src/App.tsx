@@ -1,7 +1,7 @@
 import { type ChangeEvent, type FormEvent, useEffect, useMemo, useState } from "react";
-import { analyzeQuality, ApiError, normalizeInput } from "./api";
+import { analyzeQuality, analyzeSecurity, ApiError } from "./api";
 import { AnalysisParameters } from "./components/AnalysisParameters";
-import type { AnalysisType, NormalizedInput, QualityParameters, QualityReport, SecurityParameters } from "./domain";
+import type { AnalysisType, NormalizedInput, QualityParameters, QualityReport, SecurityParameters, SecurityReport } from "./domain";
 
 type ServiceState = "checking" | "ready" | "unavailable";
 
@@ -48,6 +48,7 @@ export function App() {
   const [security, setSecurity] = useState<SecurityParameters>(defaultSecurity);
   const [normalizedInput, setNormalizedInput] = useState<NormalizedInput | null>(null);
   const [qualityReport, setQualityReport] = useState<QualityReport | null>(null);
+  const [securityReport, setSecurityReport] = useState<SecurityReport | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -85,6 +86,7 @@ export function App() {
     setFileName("");
     setNormalizedInput(null);
     setQualityReport(null);
+    setSecurityReport(null);
     setMessage(null);
   };
 
@@ -99,6 +101,7 @@ export function App() {
 
     setNormalizedInput(null);
     setQualityReport(null);
+    setSecurityReport(null);
     if (file.size > MAX_FILE_BYTES) {
       setMessage("The file is too large. Choose a source file under 200 KB.");
       return;
@@ -124,6 +127,7 @@ export function App() {
     setMessage(null);
     setNormalizedInput(null);
     setQualityReport(null);
+    setSecurityReport(null);
 
     const generation_params = {
       temperature: 0.3,
@@ -143,14 +147,15 @@ export function App() {
         setNormalizedInput(result.normalizedInput);
         setQualityReport(result.report);
       } else {
-        const result = await normalizeInput({
+        const result = await analyzeSecurity({
           analysis_type: "security",
           code_input: code,
           ...(fileName ? { file_name: fileName } : {}),
           parameters: security,
           generation_params
         });
-        setNormalizedInput(result);
+        setNormalizedInput(result.normalizedInput);
+        setSecurityReport(result.report);
       }
     } catch (error) {
       setMessage(error instanceof ApiError ? error.message : "The request could not be completed.");
@@ -219,6 +224,7 @@ export function App() {
                 setAnalysisType(event.target.value as AnalysisType);
                 setNormalizedInput(null);
                 setQualityReport(null);
+                setSecurityReport(null);
                 setMessage(null);
               }}
             >
@@ -235,12 +241,14 @@ export function App() {
               setQuality(value);
               setNormalizedInput(null);
               setQualityReport(null);
+              setSecurityReport(null);
               setMessage(null);
             }}
             onSecurityChange={(value) => {
               setSecurity(value);
               setNormalizedInput(null);
               setQualityReport(null);
+              setSecurityReport(null);
               setMessage(null);
             }}
           />
@@ -251,7 +259,7 @@ export function App() {
         <div className="action-row">
           <p>Code stays in this request and is not saved.</p>
           <button type="submit" disabled={submitting}>
-            {submitting ? "Working" : analysisType === "quality" ? "Analyze quality" : "Check input"}
+            {submitting ? "Working" : analysisType === "quality" ? "Analyze quality" : "Analyze security"}
           </button>
         </div>
       </form>
@@ -278,7 +286,7 @@ export function App() {
       )}
 
       {qualityReport && (
-        <section className="quality-report" aria-live="polite">
+        <section className="report" aria-live="polite">
           <div className="report-heading">
             <div>
               <p className="step-label">Quality report</p>
@@ -313,6 +321,51 @@ export function App() {
                 <li key={`${recommendation.title}-${index}`}>
                   <strong>{recommendation.title}</strong>
                   <p>{recommendation.description}</p>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+      )}
+
+      {securityReport && (
+        <section className="report" aria-live="polite">
+          <div className="report-heading">
+            <div>
+              <p className="step-label">Security report</p>
+              <h2>{securityReport.risk_assessment.level} risk</h2>
+            </div>
+            <p>{securityReport.risk_assessment.summary}</p>
+          </div>
+
+          <h3>Vulnerabilities</h3>
+          {securityReport.vulnerabilities.length === 0 ? (
+            <p>No vulnerabilities found.</p>
+          ) : (
+            <ol className="report-list">
+              {securityReport.vulnerabilities.map((vulnerability, index) => (
+                <li key={`${vulnerability.title}-${index}`}>
+                  <div className="finding-meta">
+                    <strong>{vulnerability.title}</strong>
+                    <span>{vulnerability.severity} | {findingLocation(vulnerability.line_start, vulnerability.line_end)}</span>
+                  </div>
+                  <p>{vulnerability.category}</p>
+                  <p>{vulnerability.description}</p>
+                  <p><strong>Mitigation:</strong> {vulnerability.mitigation}</p>
+                </li>
+              ))}
+            </ol>
+          )}
+
+          <h3>Mitigations</h3>
+          {securityReport.mitigations.length === 0 ? (
+            <p>No additional mitigations.</p>
+          ) : (
+            <ol className="report-list">
+              {securityReport.mitigations.map((mitigation, index) => (
+                <li key={`${mitigation.title}-${index}`}>
+                  <strong>{mitigation.title}</strong>
+                  <p>{mitigation.description}</p>
                 </li>
               ))}
             </ol>

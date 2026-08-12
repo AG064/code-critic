@@ -5,6 +5,7 @@ import {
   type QualityReport,
   type QualityParameters,
   type SecurityFocusArea,
+  type SecurityReport,
   type SecurityParameters
 } from "./domain";
 
@@ -130,6 +131,42 @@ function isQualityReport(value: unknown): value is QualityReport {
     && validRecommendations;
 }
 
+function isSecurityReport(value: unknown): value is SecurityReport {
+  if (!isRecord(value) || value.analysis_type !== "security" || !isRecord(value.risk_assessment)
+    || !Array.isArray(value.vulnerabilities) || !Array.isArray(value.mitigations)) {
+    return false;
+  }
+
+  const riskLevels = ["low", "medium", "high", "critical"] as const;
+  const validVulnerabilities = value.vulnerabilities.every((item) => {
+    if (!isRecord(item)) {
+      return false;
+    }
+    const validLines = (item.line_start === null && item.line_end === null)
+      || (typeof item.line_start === "number" && Number.isInteger(item.line_start)
+        && typeof item.line_end === "number" && Number.isInteger(item.line_end)
+        && item.line_start >= 1 && item.line_end >= item.line_start);
+
+    return typeof item.title === "string"
+      && isAllowedValue(item.severity, riskLevels)
+      && typeof item.category === "string"
+      && validLines
+      && typeof item.description === "string"
+      && typeof item.mitigation === "string";
+  });
+
+  const validMitigations = value.mitigations.every((item) => isRecord(item)
+    && typeof item.title === "string"
+    && typeof item.description === "string");
+
+  return isAllowedValue(value.risk_assessment.level, riskLevels)
+    && typeof value.risk_assessment.summary === "string"
+    && value.vulnerabilities.length <= 12
+    && value.mitigations.length <= 12
+    && validVulnerabilities
+    && validMitigations;
+}
+
 async function readResponseBody(response: Response): Promise<unknown> {
   try {
     return await response.json();
@@ -185,6 +222,16 @@ export async function analyzeQuality(
 ): Promise<{ normalizedInput: NormalizedInput; report: QualityReport }> {
   const body = await postJson("/api/analyze", payload, 58_000);
   if (!isRecord(body) || !isNormalizedInput(body.normalized_input) || !isQualityReport(body.report)) {
+    throw new ApiError("The service returned an invalid response.", "invalid_response");
+  }
+  return { normalizedInput: body.normalized_input, report: body.report };
+}
+
+export async function analyzeSecurity(
+  payload: Extract<AnalysisRequest, { analysis_type: "security" }>
+): Promise<{ normalizedInput: NormalizedInput; report: SecurityReport }> {
+  const body = await postJson("/api/analyze", payload, 58_000);
+  if (!isRecord(body) || !isNormalizedInput(body.normalized_input) || !isSecurityReport(body.report)) {
     throw new ApiError("The service returned an invalid response.", "invalid_response");
   }
   return { normalizedInput: body.normalized_input, report: body.report };

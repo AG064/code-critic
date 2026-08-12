@@ -6,6 +6,7 @@ import type { Express } from "express";
 import { createApp } from "./app.js";
 import { ReviewError } from "./review/DeepSeekClient.js";
 import type { QualityReport } from "./review/QualityReview.js";
+import type { SecurityReport } from "./review/SecurityReview.js";
 
 function pythonLines(count: number): string {
   return Array.from({ length: count }, (_, index) => index === 0 ? "def review_code():" : `    value_${index} = ${index}`).join("\n");
@@ -31,6 +32,16 @@ const qualityReport: QualityReport = {
   summary: "The code is consistent.",
   findings: [],
   recommendations: []
+};
+
+const securityReport: SecurityReport = {
+  analysis_type: "security",
+  risk_assessment: {
+    level: "low",
+    summary: "No supported vulnerabilities were found."
+  },
+  vulnerabilities: [],
+  mitigations: []
 };
 
 test("normalization endpoint returns a stable input object", async () => {
@@ -141,5 +152,29 @@ test("analysis endpoint returns provider errors without internal details", async
     assert.equal(response.status, 429);
     assert.equal(body.code, "provider_rate_limited");
     assert.equal("stack" in body, false);
+  }, app);
+});
+
+test("analysis endpoint returns a security report", async () => {
+  const app = createApp({ reviewSecurity: async () => securityReport });
+
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/analyze`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        analysis_type: "security",
+        code_input: pythonLines(100),
+        file_name: "review.py",
+        parameters: {
+          security_focus_areas: ["authentication", "injection"],
+          threat_level: "high"
+        }
+      })
+    });
+    const body = await response.json() as { report?: SecurityReport };
+
+    assert.equal(response.status, 200);
+    assert.equal(body.report?.risk_assessment.level, "low");
   }, app);
 });

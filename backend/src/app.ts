@@ -2,9 +2,11 @@ import express, { type ErrorRequestHandler } from "express";
 import { InputValidationError, normalizeAnalysisInput } from "./input/InputNormalizer.js";
 import { ReviewError } from "./review/DeepSeekClient.js";
 import { reviewQuality, type QualityInput, type QualityReport } from "./review/QualityReview.js";
+import { reviewSecurity, type SecurityInput, type SecurityReport } from "./review/SecurityReview.js";
 
 interface AppDependencies {
   reviewQuality?: (input: QualityInput) => Promise<QualityReport>;
+  reviewSecurity?: (input: SecurityInput) => Promise<SecurityReport>;
 }
 
 function hasErrorType(error: unknown, type: string): boolean {
@@ -14,6 +16,7 @@ function hasErrorType(error: unknown, type: string): boolean {
 export function createApp(dependencies: AppDependencies = {}) {
   const app = express();
   const runQualityReview = dependencies.reviewQuality ?? reviewQuality;
+  const runSecurityReview = dependencies.reviewSecurity ?? reviewSecurity;
 
   app.disable("x-powered-by");
   app.use((_request, response, next) => {
@@ -37,11 +40,9 @@ export function createApp(dependencies: AppDependencies = {}) {
   app.post("/analyze", async (request, response, next) => {
     try {
       const normalizedInput = normalizeAnalysisInput(request.body);
-      if (normalizedInput.analysis_type !== "quality") {
-        throw new ReviewError("unsupported_analysis_type", 400, "Only Quality analysis is available.");
-      }
-
-      const report = await runQualityReview(normalizedInput);
+      const report = normalizedInput.analysis_type === "quality"
+        ? await runQualityReview(normalizedInput)
+        : await runSecurityReview(normalizedInput);
       response.json({ normalized_input: normalizedInput, report });
     } catch (error) {
       next(error);

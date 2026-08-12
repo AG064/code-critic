@@ -24,7 +24,7 @@ The health endpoint is available at `http://localhost:27351/health`.
 
 1. Paste source code into the editor or choose a source file.
 2. Select Quality or Security and adjust the displayed parameters.
-3. Select **Analyze quality** for a Quality report. For Security, **Check input** validates and normalizes the request.
+3. Select **Analyze quality** or **Analyze security**.
 4. Review the detected language, line count, file name, and result.
 
 Quality input includes strictness, naming convention, and code organization settings. Security input includes a framework, severity threshold, focus areas, and threat level.
@@ -56,13 +56,13 @@ Normalization makes equivalent input produce the same request structure:
 
 The normalized result contains `analysis_type`, code content, detected language, line count, file name, analysis parameters, and generation parameters. Defaults are `temperature: 0.3`, `max_tokens: 1500`, and `top_p: 0.9`.
 
-## Quality review
+## Review prompts
 
-Quality review uses `deepseek-v4-flash` through the DeepSeek chat completions API. The request uses JSON mode, non-thinking mode, `temperature: 0.3`, `max_tokens: 1500`, and `top_p: 0.9`.
+Quality and Security reviews use `deepseek-v4-flash` through the DeepSeek chat completions API. Requests use JSON mode, non-thinking mode, `temperature: 0.3`, `max_tokens: 1500`, and `top_p: 0.9`.
 
-The Quality prompt is separate from input normalization. It is zero-shot: the prompt defines the report fields and includes a JSON format example, but it does not include an example code review. This reduces prompt size and avoids copying example findings into a report.
+Quality and Security have separate prompt templates and report schemas. Both are zero-shot: each prompt defines its report fields and includes a JSON format example, but neither includes an example code review. This reduces prompt size and avoids copying example findings into a report.
 
-The response must contain a score, summary, findings, and recommendations. Invalid or incomplete responses are rejected.
+Quality output contains a score, summary, findings, and recommendations. Security output contains a risk assessment, vulnerabilities, severity levels, and mitigations. Invalid or incomplete responses are rejected.
 
 ## Checks
 
@@ -78,7 +78,7 @@ The backend tests cover language detection, boundary validation, normalization d
 
 ## Privacy
 
-Code Critic has no accounts, sessions, database, or persistent code storage. Quality review sends the submitted code to the configured DeepSeek API. Normalization does not contact DeepSeek. Responses use `Cache-Control: no-store`.
+Code Critic has no accounts, sessions, database, or persistent code storage. Reviews send the submitted code to the configured DeepSeek API. Normalization does not contact DeepSeek. Responses use `Cache-Control: no-store`.
 
 ## Additional features
 

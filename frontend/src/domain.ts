@@ -93,3 +93,24 @@ export type QualityReport = {
     description: string;
   }>;
 };
+
+export type SecurityReport = {
+  analysis_type: "security";
+  risk_assessment: {
+    level: "low" | "medium" | "high" | "critical";
+    summary: string;
+  };
+  vulnerabilities: Array<{
+    title: string;
+    severity: "low" | "medium" | "high" | "critical";
+    category: string;
+    line_start: number | null;
+    line_end: number | null;
+    description: string;
+    mitigation: string;
+  }>;
+  mitigations: Array<{
+    title: string;
+    description: string;
+  }>;
+};
