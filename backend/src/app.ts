@@ -1,12 +1,19 @@
 import express, { type ErrorRequestHandler } from "express";
 import { InputValidationError, normalizeAnalysisInput } from "./input/InputNormalizer.js";
+import { ReviewError } from "./review/DeepSeekClient.js";
+import { reviewQuality, type QualityInput, type QualityReport } from "./review/QualityReview.js";
+
+interface AppDependencies {
+  reviewQuality?: (input: QualityInput) => Promise<QualityReport>;
+}
 
 function hasErrorType(error: unknown, type: string): boolean {
   return typeof error === "object" && error !== null && "type" in error && error.type === type;
 }
 
-export function createApp() {
+export function createApp(dependencies: AppDependencies = {}) {
   const app = express();
+  const runQualityReview = dependencies.reviewQuality ?? reviewQuality;
 
   app.disable("x-powered-by");
   app.use((_request, response, next) => {
@@ -27,6 +34,20 @@ export function createApp() {
     }
   });
 
+  app.post("/analyze", async (request, response, next) => {
+    try {
+      const normalizedInput = normalizeAnalysisInput(request.body);
+      if (normalizedInput.analysis_type !== "quality") {
+        throw new ReviewError("unsupported_analysis_type", 400, "Only Quality analysis is available.");
+      }
+
+      const report = await runQualityReview(normalizedInput);
+      response.json({ normalized_input: normalizedInput, report });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.use((_request, response) => {
     response.status(404).json({ error: "Route not found." });
   });
@@ -39,6 +60,11 @@ export function createApp() {
 
     if (hasErrorType(error, "entity.too.large")) {
       response.status(413).json({ error: "The request body is too large.", code: "request_too_large" });
+      return;
+    }
+
+    if (error instanceof ReviewError) {
+      response.status(error.status).json({ error: error.message, code: error.code });
       return;
     }
 

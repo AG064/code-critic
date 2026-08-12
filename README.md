@@ -9,7 +9,7 @@ The application supports C, C++, C#, CSS, Go, HTML, Java, JavaScript, Kotlin, PH
 Docker is the only required dependency.
 
 1. Copy `.env.example` to `.env`.
-2. Keep `DEEPSEEK_API_KEY` in the local `.env` file. Do not commit the key.
+2. Add `DEEPSEEK_API_KEY` to the local `.env` file. Do not commit the key.
 3. Build and start the application:
 
    ```sh
@@ -24,8 +24,8 @@ The health endpoint is available at `http://localhost:27351/health`.
 
 1. Paste source code into the editor or choose a source file.
 2. Select Quality or Security and adjust the displayed parameters.
-3. Select **Check input**.
-4. Review the detected language, line count, file name, and analysis type.
+3. Select **Analyze quality** for a Quality report. For Security, **Check input** validates and normalizes the request.
+4. Review the detected language, line count, file name, and result.
 
 Quality input includes strictness, naming convention, and code organization settings. Security input includes a framework, severity threshold, focus areas, and threat level.
 
@@ -56,6 +56,14 @@ Normalization makes equivalent input produce the same request structure:
 
 The normalized result contains `analysis_type`, code content, detected language, line count, file name, analysis parameters, and generation parameters. Defaults are `temperature: 0.3`, `max_tokens: 1500`, and `top_p: 0.9`.
 
+## Quality review
+
+Quality review uses `deepseek-v4-flash` through the DeepSeek chat completions API. The request uses JSON mode, non-thinking mode, `temperature: 0.3`, `max_tokens: 1500`, and `top_p: 0.9`.
+
+The Quality prompt is separate from input normalization. It is zero-shot: the prompt defines the report fields and includes a JSON format example, but it does not include an example code review. This reduces prompt size and avoids copying example findings into a report.
+
+The response must contain a score, summary, findings, and recommendations. Invalid or incomplete responses are rejected.
+
 ## Checks
 
 Run the backend test target and verify the complete Docker configuration:
@@ -70,7 +78,7 @@ The backend tests cover language detection, boundary validation, normalization d
 
 ## Privacy
 
-Code Critic has no accounts, sessions, database, or persistent code storage. The normalization endpoint does not write code to disk or send it to an external provider. Responses use `Cache-Control: no-store`.
+Code Critic has no accounts, sessions, database, or persistent code storage. Quality review sends the submitted code to the configured DeepSeek API. Normalization does not contact DeepSeek. Responses use `Cache-Control: no-store`.
 
 ## Additional features
 

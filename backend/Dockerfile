@@ -9,7 +9,7 @@ COPY src ./src
 RUN npm run build
 
 FROM build AS test
-RUN node --test dist/*.test.js dist/input/*.test.js
+RUN node --test dist/*.test.js dist/input/*.test.js dist/review/*.test.js
 
 FROM node:22-alpine AS production-dependencies
 WORKDIR /app

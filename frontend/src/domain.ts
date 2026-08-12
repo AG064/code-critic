@@ -43,17 +43,27 @@ export type SecurityParameters = {
   threat_level: "low" | "medium" | "high";
 };
 
-export type AnalysisRequest = {
-  analysis_type: AnalysisType;
+export type GenerationParameters = {
+  temperature: number;
+  max_tokens: number;
+  top_p: number;
+};
+
+type RequestBase = {
   code_input: string;
   file_name?: string;
-  parameters: QualityParameters | SecurityParameters;
-  generation_params: {
-    temperature: number;
-    max_tokens: number;
-    top_p: number;
-  };
+  generation_params: GenerationParameters;
 };
+
+export type AnalysisRequest =
+  | RequestBase & {
+      analysis_type: "quality";
+      parameters: QualityParameters;
+    }
+  | RequestBase & {
+      analysis_type: "security";
+      parameters: SecurityParameters;
+    };
 
 export type NormalizedInput = {
   analysis_type: AnalysisType;
@@ -64,9 +74,22 @@ export type NormalizedInput = {
     file_name: string;
   };
   parameters: QualityParameters | SecurityParameters;
-  generation_params: {
-    temperature: number;
-    max_tokens: number;
-    top_p: number;
-  };
+  generation_params: GenerationParameters;
+};
+
+export type QualityReport = {
+  analysis_type: "quality";
+  score: number;
+  summary: string;
+  findings: Array<{
+    title: string;
+    severity: "low" | "medium" | "high";
+    line_start: number | null;
+    line_end: number | null;
+    description: string;
+  }>;
+  recommendations: Array<{
+    title: string;
+    description: string;
+  }>;
 };

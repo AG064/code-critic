@@ -2,14 +2,17 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import type { AddressInfo } from "node:net";
 import test from "node:test";
+import type { Express } from "express";
 import { createApp } from "./app.js";
+import { ReviewError } from "./review/DeepSeekClient.js";
+import type { QualityReport } from "./review/QualityReview.js";
 
 function pythonLines(count: number): string {
   return Array.from({ length: count }, (_, index) => index === 0 ? "def review_code():" : `    value_${index} = ${index}`).join("\n");
 }
 
-async function withServer(action: (baseUrl: string) => Promise<void>): Promise<void> {
-  const server = createApp().listen(0, "127.0.0.1");
+async function withServer(action: (baseUrl: string) => Promise<void>, app: Express = createApp()): Promise<void> {
+  const server = app.listen(0, "127.0.0.1");
   await once(server, "listening");
 
   try {
@@ -21,6 +24,14 @@ async function withServer(action: (baseUrl: string) => Promise<void>): Promise<v
     });
   }
 }
+
+const qualityReport: QualityReport = {
+  analysis_type: "quality",
+  score: 90,
+  summary: "The code is consistent.",
+  findings: [],
+  recommendations: []
+};
 
 test("normalization endpoint returns a stable input object", async () => {
   await withServer(async (baseUrl) => {
@@ -86,4 +97,49 @@ test("normalization endpoint rejects oversized request bodies", async () => {
     assert.equal(response.status, 413);
     assert.equal(body.code, "request_too_large");
   });
+});
+
+test("analysis endpoint returns a quality report", async () => {
+  const app = createApp({ reviewQuality: async () => qualityReport });
+
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/analyze`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        analysis_type: "quality",
+        code_input: pythonLines(100),
+        file_name: "review.py"
+      })
+    });
+    const body = await response.json() as { report?: QualityReport };
+
+    assert.equal(response.status, 200);
+    assert.equal(body.report?.score, 90);
+  }, app);
+});
+
+test("analysis endpoint returns provider errors without internal details", async () => {
+  const app = createApp({
+    reviewQuality: async () => {
+      throw new ReviewError("provider_rate_limited", 429, "DeepSeek rate limit reached. Try again shortly.");
+    }
+  });
+
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/analyze`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        analysis_type: "quality",
+        code_input: pythonLines(100),
+        file_name: "review.py"
+      })
+    });
+    const body = await response.json() as Record<string, unknown>;
+
+    assert.equal(response.status, 429);
+    assert.equal(body.code, "provider_rate_limited");
+    assert.equal("stack" in body, false);
+  }, app);
 });

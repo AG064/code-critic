@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
-    "test": "npm run build && node --test dist/*.test.js dist/input/*.test.js"
+    "test": "npm run build && node --test dist/*.test.js dist/input/*.test.js dist/review/*.test.js"
   },
   "dependencies": {
     "express": "^5.1.0"

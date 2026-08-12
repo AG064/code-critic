@@ -2,6 +2,7 @@ import {
   supportedLanguages,
   type AnalysisRequest,
   type NormalizedInput,
+  type QualityReport,
   type QualityParameters,
   type SecurityFocusArea,
   type SecurityParameters
@@ -94,6 +95,41 @@ function isNormalizedInput(value: unknown): value is NormalizedInput {
     && value.generation_params.top_p <= 1;
 }
 
+function isQualityReport(value: unknown): value is QualityReport {
+  if (!isRecord(value) || value.analysis_type !== "quality" || !Array.isArray(value.findings) || !Array.isArray(value.recommendations)) {
+    return false;
+  }
+
+  const validFindings = value.findings.every((item) => {
+    if (!isRecord(item)) {
+      return false;
+    }
+    const validLines = (item.line_start === null && item.line_end === null)
+      || (typeof item.line_start === "number" && Number.isInteger(item.line_start)
+        && typeof item.line_end === "number" && Number.isInteger(item.line_end)
+        && item.line_start >= 1 && item.line_end >= item.line_start);
+
+    return typeof item.title === "string"
+      && isAllowedValue(item.severity, ["low", "medium", "high"] as const)
+      && validLines
+      && typeof item.description === "string";
+  });
+
+  const validRecommendations = value.recommendations.every((item) => isRecord(item)
+    && typeof item.title === "string"
+    && typeof item.description === "string");
+
+  return typeof value.score === "number"
+    && Number.isInteger(value.score)
+    && value.score >= 0
+    && value.score <= 100
+    && typeof value.summary === "string"
+    && value.findings.length <= 12
+    && value.recommendations.length <= 12
+    && validFindings
+    && validRecommendations;
+}
+
 async function readResponseBody(response: Response): Promise<unknown> {
   try {
     return await response.json();
@@ -102,12 +138,12 @@ async function readResponseBody(response: Response): Promise<unknown> {
   }
 }
 
-export async function normalizeInput(payload: AnalysisRequest): Promise<NormalizedInput> {
+async function postJson(path: string, payload: AnalysisRequest, timeoutMs: number): Promise<unknown> {
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 12_000);
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch("/api/normalize", {
+    const response = await fetch(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -122,20 +158,34 @@ export async function normalizeInput(payload: AnalysisRequest): Promise<Normaliz
       throw new ApiError(message, code);
     }
 
-    if (!isRecord(body) || !isNormalizedInput(body.normalized_input)) {
-      throw new ApiError("The service returned an invalid response.", "invalid_response");
-    }
-
-    return body.normalized_input;
+    return body;
   } catch (error) {
     if (error instanceof ApiError) {
       throw error;
     }
     if (error instanceof DOMException && error.name === "AbortError") {
-      throw new ApiError("The input check timed out. Try again.", "timeout");
+      throw new ApiError("The request timed out. Try again.", "timeout");
     }
     throw new ApiError("The service is unavailable. Try again shortly.", "unavailable");
   } finally {
     window.clearTimeout(timeout);
   }
+}
+
+export async function normalizeInput(payload: AnalysisRequest): Promise<NormalizedInput> {
+  const body = await postJson("/api/normalize", payload, 12_000);
+  if (!isRecord(body) || !isNormalizedInput(body.normalized_input)) {
+    throw new ApiError("The service returned an invalid response.", "invalid_response");
+  }
+  return body.normalized_input;
+}
+
+export async function analyzeQuality(
+  payload: Extract<AnalysisRequest, { analysis_type: "quality" }>
+): Promise<{ normalizedInput: NormalizedInput; report: QualityReport }> {
+  const body = await postJson("/api/analyze", payload, 58_000);
+  if (!isRecord(body) || !isNormalizedInput(body.normalized_input) || !isQualityReport(body.report)) {
+    throw new ApiError("The service returned an invalid response.", "invalid_response");
+  }
+  return { normalizedInput: body.normalized_input, report: body.report };
 }

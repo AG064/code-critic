@@ -73,6 +73,11 @@ h2 {
   letter-spacing: -0.015em;
 }
 
+h3 {
+  margin: 32px 0 12px;
+  font-size: 1rem;
+}
+
 .intro {
   margin: 12px 0 0;
   color: #5b5e62;
@@ -320,6 +325,54 @@ button:disabled {
   font-weight: 700;
 }
 
+.quality-report {
+  margin-top: 40px;
+  padding-top: 32px;
+  border-top: 2px solid #272a2d;
+}
+
+.report-heading {
+  display: grid;
+  grid-template-columns: minmax(150px, 220px) 1fr;
+  gap: 32px;
+  align-items: start;
+}
+
+.report-heading h2,
+.report-heading p {
+  margin-bottom: 0;
+}
+
+.report-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid #d1d2cd;
+}
+
+.report-list li {
+  padding: 18px 0;
+  border-bottom: 1px solid #d1d2cd;
+}
+
+.report-list li > p {
+  margin: 8px 0 0;
+  color: #4f5357;
+  line-height: 1.55;
+}
+
+.finding-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.finding-meta span {
+  color: #666a6f;
+  font-size: 0.84rem;
+  text-transform: capitalize;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -351,8 +404,14 @@ button:disabled {
 
   .field-grid,
   .checkbox-grid,
-  .input-result dl {
+  .input-result dl,
+  .report-heading {
     grid-template-columns: 1fr;
+  }
+
+  .finding-meta {
+    flex-direction: column;
+    gap: 5px;
   }
 
   .file-control input {

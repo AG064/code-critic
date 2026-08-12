@@ -1,7 +1,7 @@
 import { type ChangeEvent, type FormEvent, useEffect, useMemo, useState } from "react";
-import { ApiError, normalizeInput } from "./api";
+import { analyzeQuality, ApiError, normalizeInput } from "./api";
 import { AnalysisParameters } from "./components/AnalysisParameters";
-import type { AnalysisRequest, AnalysisType, NormalizedInput, QualityParameters, SecurityParameters } from "./domain";
+import type { AnalysisType, NormalizedInput, QualityParameters, QualityReport, SecurityParameters } from "./domain";
 
 type ServiceState = "checking" | "ready" | "unavailable";
 
@@ -32,6 +32,13 @@ function countLines(code: string): number {
   return lines.length;
 }
 
+function findingLocation(lineStart: number | null, lineEnd: number | null): string {
+  if (lineStart === null || lineEnd === null) {
+    return "Whole file";
+  }
+  return lineStart === lineEnd ? `Line ${lineStart}` : `Lines ${lineStart}-${lineEnd}`;
+}
+
 export function App() {
   const [serviceState, setServiceState] = useState<ServiceState>("checking");
   const [analysisType, setAnalysisType] = useState<AnalysisType>("quality");
@@ -40,8 +47,9 @@ export function App() {
   const [quality, setQuality] = useState<QualityParameters>(defaultQuality);
   const [security, setSecurity] = useState<SecurityParameters>(defaultSecurity);
   const [normalizedInput, setNormalizedInput] = useState<NormalizedInput | null>(null);
+  const [qualityReport, setQualityReport] = useState<QualityReport | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [checkingInput, setCheckingInput] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -74,7 +82,9 @@ export function App() {
 
   const handleCodeChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     setCode(event.target.value);
+    setFileName("");
     setNormalizedInput(null);
+    setQualityReport(null);
     setMessage(null);
   };
 
@@ -88,6 +98,7 @@ export function App() {
     }
 
     setNormalizedInput(null);
+    setQualityReport(null);
     if (file.size > MAX_FILE_BYTES) {
       setMessage("The file is too large. Choose a source file under 200 KB.");
       return;
@@ -109,29 +120,42 @@ export function App() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setCheckingInput(true);
+    setSubmitting(true);
     setMessage(null);
     setNormalizedInput(null);
+    setQualityReport(null);
 
-    const payload: AnalysisRequest = {
-      analysis_type: analysisType,
-      code_input: code,
-      ...(fileName ? { file_name: fileName } : {}),
-      parameters: analysisType === "quality" ? quality : security,
-      generation_params: {
-        temperature: 0.3,
-        max_tokens: 1500,
-        top_p: 0.9
-      }
+    const generation_params = {
+      temperature: 0.3,
+      max_tokens: 1500,
+      top_p: 0.9
     };
 
     try {
-      const result = await normalizeInput(payload);
-      setNormalizedInput(result);
+      if (analysisType === "quality") {
+        const result = await analyzeQuality({
+          analysis_type: "quality",
+          code_input: code,
+          ...(fileName ? { file_name: fileName } : {}),
+          parameters: quality,
+          generation_params
+        });
+        setNormalizedInput(result.normalizedInput);
+        setQualityReport(result.report);
+      } else {
+        const result = await normalizeInput({
+          analysis_type: "security",
+          code_input: code,
+          ...(fileName ? { file_name: fileName } : {}),
+          parameters: security,
+          generation_params
+        });
+        setNormalizedInput(result);
+      }
     } catch (error) {
-      setMessage(error instanceof ApiError ? error.message : "The input could not be checked.");
+      setMessage(error instanceof ApiError ? error.message : "The request could not be completed.");
     } finally {
-      setCheckingInput(false);
+      setSubmitting(false);
     }
   };
 
@@ -194,6 +218,7 @@ export function App() {
               onChange={(event) => {
                 setAnalysisType(event.target.value as AnalysisType);
                 setNormalizedInput(null);
+                setQualityReport(null);
                 setMessage(null);
               }}
             >
@@ -209,11 +234,13 @@ export function App() {
             onQualityChange={(value) => {
               setQuality(value);
               setNormalizedInput(null);
+              setQualityReport(null);
               setMessage(null);
             }}
             onSecurityChange={(value) => {
               setSecurity(value);
               setNormalizedInput(null);
+              setQualityReport(null);
               setMessage(null);
             }}
           />
@@ -223,8 +250,8 @@ export function App() {
 
         <div className="action-row">
           <p>Code stays in this request and is not saved.</p>
-          <button type="submit" disabled={checkingInput}>
-            {checkingInput ? "Checking" : "Check input"}
+          <button type="submit" disabled={submitting}>
+            {submitting ? "Working" : analysisType === "quality" ? "Analyze quality" : "Check input"}
           </button>
         </div>
       </form>
@@ -247,6 +274,49 @@ export function App() {
               <dd>{normalizedInput.analysis_type}</dd>
             </div>
           </dl>
+        </section>
+      )}
+
+      {qualityReport && (
+        <section className="quality-report" aria-live="polite">
+          <div className="report-heading">
+            <div>
+              <p className="step-label">Quality report</p>
+              <h2>{qualityReport.score}/100</h2>
+            </div>
+            <p>{qualityReport.summary}</p>
+          </div>
+
+          <h3>Findings</h3>
+          {qualityReport.findings.length === 0 ? (
+            <p>No findings.</p>
+          ) : (
+            <ol className="report-list">
+              {qualityReport.findings.map((finding, index) => (
+                <li key={`${finding.title}-${index}`}>
+                  <div className="finding-meta">
+                    <strong>{finding.title}</strong>
+                    <span>{finding.severity} | {findingLocation(finding.line_start, finding.line_end)}</span>
+                  </div>
+                  <p>{finding.description}</p>
+                </li>
+              ))}
+            </ol>
+          )}
+
+          <h3>Recommendations</h3>
+          {qualityReport.recommendations.length === 0 ? (
+            <p>No recommendations.</p>
+          ) : (
+            <ol className="report-list">
+              {qualityReport.recommendations.map((recommendation, index) => (
+                <li key={`${recommendation.title}-${index}`}>
+                  <strong>{recommendation.title}</strong>
+                  <p>{recommendation.description}</p>
+                </li>
+              ))}
+            </ol>
+          )}
         </section>
       )}
     </main>
