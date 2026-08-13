@@ -62,6 +62,18 @@ test("rejects incomplete provider output", async () => {
   );
 });
 
+test("uses a lower timeout for a bounded request", async () => {
+  const fetcher: typeof fetch = async (_input, init) => new Promise<Response>((_resolve, reject) => {
+    init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+  });
+  const client = new DeepSeekClient(config, fetcher);
+
+  await assert.rejects(
+    () => client.completeJson({ system: "Return JSON.", user: "Review code.", generation, timeoutMs: 10 }),
+    (error: unknown) => error instanceof ReviewError && error.code === "provider_timeout"
+  );
+});
+
 test("rejects missing provider configuration", () => {
   assert.throws(
     () => new DeepSeekClient({ ...config, apiKey: "" }),

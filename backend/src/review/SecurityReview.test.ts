@@ -89,3 +89,18 @@ test("rejects line references outside the submitted code", () => {
 
   assert.throws(() => parseSecurityReport(JSON.stringify(report), 100), /invalid security report/i);
 });
+
+test("repairs one malformed security report", async () => {
+  let calls = 0;
+  const client: JsonCompletionClient = {
+    async completeJson() {
+      calls += 1;
+      return calls === 1 ? "{}" : validReport;
+    }
+  };
+
+  const report = await reviewSecurity(securityInput(), client);
+
+  assert.equal(report.risk_assessment.level, "high");
+  assert.equal(calls, 2);
+});

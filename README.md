@@ -64,6 +64,12 @@ Quality and Security have separate prompt templates and report schemas. Both are
 
 Quality output contains a score, summary, findings, and recommendations. Security output contains a risk assessment, vulnerabilities, severity levels, and mitigations. Invalid or incomplete responses are rejected.
 
+## Report handling
+
+The backend removes response wrappers, normalizes spacing, code fences, and tables, and preserves code references and multiline examples. Every required report section is validated before the result is returned.
+
+If the first response is incomplete or does not match its report schema, the backend makes one corrective request. It does not retry configuration, authentication, rate limit, timeout, or service availability errors. The two request time budgets keep this bounded path below the client timeout.
+
 ## Checks
 
 Run the backend test target and verify the complete Docker configuration:
@@ -74,7 +80,7 @@ docker compose config
 docker compose build
 ```
 
-The backend tests cover language detection, boundary validation, normalization defaults, malformed input, and HTTP error responses.
+The backend tests cover language detection, boundary validation, normalization defaults, malformed input, report validation, post-processing, bounded repair, and HTTP error responses.
 
 ## Privacy
 

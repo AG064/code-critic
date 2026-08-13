@@ -1,5 +1,7 @@
 import type { NormalizedAnalysisInput } from "../input/types.js";
 import { DeepSeekClient, ReviewError, type JsonCompletionClient } from "./DeepSeekClient.js";
+import { normalizeInlineText, normalizeReportText, parseReportJson } from "./ReportOutput.js";
+import { runReview } from "./ReviewRunner.js";
 
 export type QualityInput = Extract<NormalizedAnalysisInput, { analysis_type: "quality" }>;
 
@@ -83,11 +85,11 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function readText(value: unknown, maximum: number): string {
+function readText(value: unknown, maximum: number, inline = false): string {
   if (typeof value !== "string") {
     return invalidReport();
   }
-  const text = value.trim().replace(/\s+/g, " ");
+  const text = inline ? normalizeInlineText(value) : normalizeReportText(value);
   if (!text || text.length > maximum) {
     return invalidReport();
   }
@@ -105,20 +107,15 @@ function readLine(value: unknown, lineCount: number): number | null {
 }
 
 function readArray(value: unknown): unknown[] {
-  if (!Array.isArray(value) || value.length > 12) {
+  if (!Array.isArray(value) || value.length > 8) {
     return invalidReport();
   }
   return value;
 }
 
 function parseJson(raw: string): unknown {
-  const trimmed = raw.trim();
-  const withoutFence = trimmed.startsWith("```")
-    ? trimmed.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "")
-    : trimmed;
-
   try {
-    return JSON.parse(withoutFence) as unknown;
+    return parseReportJson(raw);
   } catch {
     return invalidReport();
   }
@@ -144,7 +141,7 @@ export function parseQualityReport(raw: string, lineCount: number): QualityRepor
     }
 
     return {
-      title: readText(finding.title, 160),
+      title: readText(finding.title, 160, true),
       severity: finding.severity,
       line_start: lineStart,
       line_end: lineEnd,
@@ -155,7 +152,7 @@ export function parseQualityReport(raw: string, lineCount: number): QualityRepor
   const recommendations = readArray(source.recommendations).map((value): QualityRecommendation => {
     const recommendation = asRecord(value);
     return {
-      title: readText(recommendation.title, 160),
+      title: readText(recommendation.title, 160, true),
       description: readText(recommendation.description, 1200)
     };
   });
@@ -173,11 +170,9 @@ export async function reviewQuality(
   input: QualityInput,
   client: JsonCompletionClient = new DeepSeekClient()
 ): Promise<QualityReport> {
-  const raw = await client.completeJson({
+  return runReview(client, {
     system: systemPrompt,
     user: buildUserPrompt(input),
     generation: input.generation_params
-  });
-
-  return parseQualityReport(raw, input.code.line_count);
+  }, (raw) => parseQualityReport(raw, input.code.line_count));
 }

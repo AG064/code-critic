@@ -80,3 +80,18 @@ test("rejects line references outside the submitted code", () => {
 
   assert.throws(() => parseQualityReport(JSON.stringify(report), 100), /invalid quality report/i);
 });
+
+test("repairs one malformed quality report", async () => {
+  let calls = 0;
+  const client: JsonCompletionClient = {
+    async completeJson() {
+      calls += 1;
+      return calls === 1 ? "{}" : validReport;
+    }
+  };
+
+  const report = await reviewQuality(qualityInput(), client);
+
+  assert.equal(report.score, 82);
+  assert.equal(calls, 2);
+});

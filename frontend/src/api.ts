@@ -125,8 +125,8 @@ function isQualityReport(value: unknown): value is QualityReport {
     && value.score >= 0
     && value.score <= 100
     && typeof value.summary === "string"
-    && value.findings.length <= 12
-    && value.recommendations.length <= 12
+    && value.findings.length <= 8
+    && value.recommendations.length <= 8
     && validFindings
     && validRecommendations;
 }
@@ -161,8 +161,8 @@ function isSecurityReport(value: unknown): value is SecurityReport {
 
   return isAllowedValue(value.risk_assessment.level, riskLevels)
     && typeof value.risk_assessment.summary === "string"
-    && value.vulnerabilities.length <= 12
-    && value.mitigations.length <= 12
+    && value.vulnerabilities.length <= 8
+    && value.mitigations.length <= 8
     && validVulnerabilities
     && validMitigations;
 }

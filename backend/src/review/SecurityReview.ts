@@ -1,5 +1,7 @@
 import type { NormalizedAnalysisInput } from "../input/types.js";
 import { DeepSeekClient, ReviewError, type JsonCompletionClient } from "./DeepSeekClient.js";
+import { normalizeInlineText, normalizeReportText, parseReportJson } from "./ReportOutput.js";
+import { runReview } from "./ReviewRunner.js";
 
 export type SecurityInput = Extract<NormalizedAnalysisInput, { analysis_type: "security" }>;
 
@@ -91,11 +93,11 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function readText(value: unknown, maximum: number): string {
+function readText(value: unknown, maximum: number, inline = false): string {
   if (typeof value !== "string") {
     return invalidReport();
   }
-  const text = value.trim().replace(/\s+/g, " ");
+  const text = inline ? normalizeInlineText(value) : normalizeReportText(value);
   if (!text || text.length > maximum) {
     return invalidReport();
   }
@@ -113,7 +115,7 @@ function readLine(value: unknown, lineCount: number): number | null {
 }
 
 function readArray(value: unknown): unknown[] {
-  if (!Array.isArray(value) || value.length > 12) {
+  if (!Array.isArray(value) || value.length > 8) {
     return invalidReport();
   }
   return value;
@@ -127,13 +129,8 @@ function readRiskLevel(value: unknown): SecurityReport["risk_assessment"]["level
 }
 
 function parseJson(raw: string): unknown {
-  const trimmed = raw.trim();
-  const withoutFence = trimmed.startsWith("```")
-    ? trimmed.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "")
-    : trimmed;
-
   try {
-    return JSON.parse(withoutFence) as unknown;
+    return parseReportJson(raw);
   } catch {
     return invalidReport();
   }
@@ -153,9 +150,9 @@ export function parseSecurityReport(raw: string, lineCount: number): SecurityRep
     }
 
     return {
-      title: readText(vulnerability.title, 160),
+      title: readText(vulnerability.title, 160, true),
       severity: readRiskLevel(vulnerability.severity),
-      category: readText(vulnerability.category, 100),
+      category: readText(vulnerability.category, 100, true),
       line_start: lineStart,
       line_end: lineEnd,
       description: readText(vulnerability.description, 1200),
@@ -166,7 +163,7 @@ export function parseSecurityReport(raw: string, lineCount: number): SecurityRep
   const mitigations = readArray(source.mitigations).map((value): SecurityMitigation => {
     const mitigation = asRecord(value);
     return {
-      title: readText(mitigation.title, 160),
+      title: readText(mitigation.title, 160, true),
       description: readText(mitigation.description, 1200)
     };
   });
@@ -186,11 +183,9 @@ export async function reviewSecurity(
   input: SecurityInput,
   client: JsonCompletionClient = new DeepSeekClient()
 ): Promise<SecurityReport> {
-  const raw = await client.completeJson({
+  return runReview(client, {
     system: systemPrompt,
     user: buildUserPrompt(input),
     generation: input.generation_params
-  });
-
-  return parseSecurityReport(raw, input.code.line_count);
+  }, (raw) => parseSecurityReport(raw, input.code.line_count));
 }

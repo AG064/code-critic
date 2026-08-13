@@ -22,6 +22,7 @@ export interface JsonCompletionRequest {
   system: string;
   user: string;
   generation: GenerationParameters;
+  timeoutMs?: number;
 }
 
 export interface JsonCompletionClient {
@@ -110,7 +111,11 @@ export class DeepSeekClient implements JsonCompletionClient {
 
   async completeJson(request: JsonCompletionRequest): Promise<string> {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
+    const requestedTimeout = request.timeoutMs ?? this.config.timeoutMs;
+    const timeoutMs = Number.isInteger(requestedTimeout) && requestedTimeout > 0
+      ? Math.min(requestedTimeout, this.config.timeoutMs)
+      : this.config.timeoutMs;
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       const response = await this.fetcher(`${this.config.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
