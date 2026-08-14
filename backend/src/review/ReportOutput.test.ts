@@ -32,3 +32,50 @@ test("normalizes text without flattening code blocks or tables", () => {
 test("normalizes short labels to one line", () => {
   assert.equal(normalizeInlineText("  Unsafe\r\n  query  "), "Unsafe query");
 });
+
+test("removes a leading model introduction and keeps the finding", () => {
+  assert.equal(
+    normalizeReportText("As an AI code reviewer, Lines 12-14 use `user_id` without validation."),
+    "Lines 12-14 use `user_id` without validation."
+  );
+});
+
+test("removes consecutive leading prefaces", () => {
+  assert.equal(
+    normalizeReportText("Certainly! Here is the code review:\n\nUse a parameterized query."),
+    "Use a parameterized query."
+  );
+});
+
+test("keeps model wording outside the opening preface", () => {
+  const value = "Keep the literal text `As an AI code reviewer, continue.` in the example.";
+  assert.equal(normalizeReportText(value), value);
+});
+
+test("keeps legitimate opening wording", () => {
+  const value = "Sure handling is missing from the callback.";
+  assert.equal(normalizeReportText(value), value);
+});
+
+test("closes an unmatched code fence and preserves its content", () => {
+  assert.equal(
+    normalizeReportText("Example:\n\n```typescript\nconst label = \"Täpne ülevaade\";"),
+    "Example:\n\n```typescript\nconst label = \"Täpne ülevaade\";\n```"
+  );
+});
+
+test("normalizes table width and keeps Unicode and code pipes", () => {
+  const value = [
+    "| Metric|Value|Note |",
+    "|--|:---:|",
+    "| Complexity | O(n) | Väärtus |",
+    "| Mask | `left | right` |"
+  ].join("\n");
+
+  assert.equal(normalizeReportText(value), [
+    "| Metric | Value | Note |",
+    "| --- | :---: | --- |",
+    "| Complexity | O(n) | Väärtus |",
+    "| Mask | `left | right` |  |"
+  ].join("\n"));
+});

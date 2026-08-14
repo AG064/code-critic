@@ -117,7 +117,7 @@ export function AnalysisParameters({ analysisType, quality, security, onQualityC
       </div>
 
       <fieldset className="focus-areas">
-        <legend>Security focus areas</legend>
+        <legend>Vulnerability categories</legend>
         <div className="checkbox-grid">
           {focusAreaOptions.map((option) => (
             <label key={option.value}>

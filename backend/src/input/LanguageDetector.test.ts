@@ -18,6 +18,16 @@ test("does not classify a JavaScript object as CSS", () => {
   assert.equal(detectLanguage(code, "pasted-code"), "javascript");
 });
 
+test("detects minimal Java and JavaScript without a file name", () => {
+  assert.equal(detectLanguage("public class Review {}", "pasted-code"), "java");
+  assert.equal(detectLanguage("const ready = true;", "pasted-code"), "javascript");
+});
+
+test("uses the file type for mixed HTML and JavaScript", () => {
+  const code = "<html><body><script>const ready = true;</script></body></html>";
+  assert.equal(detectLanguage(code, "review.html"), "html");
+});
+
 test("returns null for unknown content", () => {
   assert.equal(detectLanguage("plain words only", "pasted-code"), null);
 });

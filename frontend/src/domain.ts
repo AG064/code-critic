@@ -52,7 +52,7 @@ export type GenerationParameters = {
 type RequestBase = {
   code_input: string;
   file_name?: string;
-  generation_params: GenerationParameters;
+  generation_params?: GenerationParameters;
 };
 
 export type AnalysisRequest =
@@ -72,6 +72,7 @@ export type NormalizedInput = {
     language: SupportedLanguage;
     line_count: number;
     file_name: string;
+    complexity: "standard" | "complex";
   };
   parameters: QualityParameters | SecurityParameters;
   generation_params: GenerationParameters;
@@ -80,6 +81,12 @@ export type NormalizedInput = {
 export type QualityReport = {
   analysis_type: "quality";
   score: number;
+  readability_score: number;
+  complexity_metrics: {
+    complexity_score: number;
+    level: "low" | "medium" | "high";
+    summary: string;
+  };
   summary: string;
   findings: Array<{
     title: string;
@@ -87,6 +94,14 @@ export type QualityReport = {
     line_start: number | null;
     line_end: number | null;
     description: string;
+  }>;
+  best_practice_violations: Array<{
+    title: string;
+    severity: "low" | "medium" | "high";
+    line_start: number | null;
+    line_end: number | null;
+    description: string;
+    recommendation: string;
   }>;
   recommendations: Array<{
     title: string;

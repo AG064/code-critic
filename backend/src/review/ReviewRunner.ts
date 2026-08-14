@@ -26,7 +26,7 @@ function repairFailed(): ReviewError {
   return new ReviewError(
     "report_repair_failed",
     502,
-    "DeepSeek could not produce a complete valid report. Try again."
+    "DeepSeek could not produce a report with all required sections and metrics. Try again."
   );
 }
 

@@ -29,7 +29,7 @@ Compose mounts the ignored local `.env` file into the backend as a read-only sec
 4. Review the detected language, line count, file name, and result.
 5. Edit the report if needed, then export it as plain text, Markdown, or HTML.
 
-Quality input includes strictness, naming convention, and code organization settings. Security input includes a framework, severity threshold, focus areas, and threat level.
+Quality input includes strictness, naming convention, and code organization settings. Security input includes a framework, severity threshold, vulnerability categories, and threat level.
 
 ## Input validation
 
@@ -53,28 +53,36 @@ Normalization makes equivalent input produce the same request structure:
 - A final line terminator does not count as an extra line.
 - Directory segments are removed from the supplied file name.
 - A supported file extension is used for language detection when present. Otherwise, detection uses language-specific code patterns.
-- Duplicate Security focus areas are removed while preserving their order.
-- Missing analysis settings receive documented defaults.
+- Duplicate vulnerability categories are removed while preserving their order.
+- Code is classified as standard or complex using its line count and control-flow signals.
+- Missing analysis and generation settings receive documented defaults.
 
-The normalized result contains `analysis_type`, code content, detected language, line count, file name, analysis parameters, and generation parameters. Defaults are `temperature: 0.3`, `max_tokens: 1500`, and `top_p: 0.9`.
+The normalized result contains `analysis_type`, code content, detected language, line count, file name, an analysis profile, analysis parameters, and generation parameters. The profile is complex when input exceeds 300 lines or contains at least 20 branch and control-flow signals outside comments and strings. With default settings, the same input receives the same profile.
 
 ## Review prompts
 
-Quality and Security reviews use `deepseek-v4-flash` through the DeepSeek chat completions API. Requests use JSON mode, non-thinking mode, `temperature: 0.3`, `max_tokens: 1500`, and `top_p: 0.9`.
+Quality and Security reviews use `deepseek-v4-flash` through the DeepSeek chat completions API. Requests use JSON mode and non-thinking mode. Default generation settings are:
 
-Quality and Security have separate prompt templates and report schemas. Both are zero-shot: each prompt defines its report fields and includes a JSON format example, but neither includes an example code review. This reduces prompt size and avoids copying example findings into a report.
+| Analysis | Input | Temperature | Max tokens | Top-p |
+| --- | --- | ---: | ---: | ---: |
+| Quality | Standard | 0.3 | 1500 | 0.9 |
+| Quality | Complex | 0.25 | 1900 | 0.9 |
+| Security | Standard | 0.2 | 1700 | 0.85 |
+| Security | Complex | 0.15 | 2200 | 0.85 |
 
-The configured model supports the required JSON request format and completed live checks within the 60-second target. Temperature `0.3` limits variation, `top_p: 0.9` keeps the review focused, and `max_tokens: 1500` is enough for the bounded report while limiting response time.
+Quality and Security have separate prompt templates and report schemas so Quality metrics do not mix with Security risk fields. Both are zero-shot: each prompt defines its report fields and includes a JSON format example, but neither includes an example code review. This reduces prompt size and avoids copying example findings into a report.
 
-Quality output contains a score, summary, findings, and recommendations. Security output contains a risk assessment, vulnerabilities, severity levels, and mitigations. Invalid or incomplete responses are rejected.
+The configured model supports the required JSON request format and completed live checks within the 60-second target. Lower temperatures improve repeatability; higher values can add variety but make reports less consistent. Security therefore uses the lower setting. Complex input receives a larger response budget, while the maximum remains bounded. Top-p stays below 1 to keep reports focused.
+
+Quality output contains an overall score, readability score, complexity score and level, findings, best-practice violations, and recommendations. A higher complexity score means more complex code: 0 to 33 is low, 34 to 66 is medium, and 67 to 100 is high. Security output contains a risk assessment, vulnerabilities, severity levels, and mitigations. Invalid or incomplete responses are rejected.
 
 ## Report handling
 
-The backend removes response wrappers, normalizes spacing, code fences, and tables, and preserves code references and multiline examples. Every required report section is validated before the result is returned.
+The backend removes response wrappers and leading model prefaces, normalizes spacing, closes unmatched code fences, aligns Markdown tables, and preserves code references and multiline examples. Every required report section and metric is validated before the result is returned.
 
 If the first response is incomplete or does not match its report schema, the backend makes one corrective request. It does not retry configuration, authentication, rate limit, timeout, or service availability errors. The two request time budgets keep this bounded path below the client timeout.
 
-The editable report exists only in browser memory. Markdown contains the current editor text. Plain text removes Markdown markers while keeping the report content. HTML contains the editor text in a standalone escaped document with no scripts or external resources.
+The editable report exists only in browser memory. Markdown contains the current editor text. Plain text removes Markdown markers while keeping the report content. HTML safely escapes the editor text, highlights recognized tokens in fenced code, and uses native expandable sections. It contains no scripts or external resources.
 
 ## Checks
 
@@ -87,7 +95,7 @@ docker compose config --quiet
 docker compose build
 ```
 
-The backend tests cover language detection, boundary validation, normalization defaults, malformed input, report validation, post-processing, bounded repair, provider configuration, and HTTP error responses. Frontend tests cover report serialization and safe export content.
+The backend tests cover language detection, boundary validation, complexity-aware defaults, malformed input, report metrics, post-processing, bounded repair, provider configuration, and HTTP error responses. Frontend tests cover pasted and uploaded source checks, API response validation, report serialization, and safe export content.
 
 ## Privacy
 

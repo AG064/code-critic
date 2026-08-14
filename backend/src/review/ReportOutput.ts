@@ -7,6 +7,26 @@ function stripWholeFence(value: string): string {
   return match?.[1]?.trim() ?? value;
 }
 
+function stripLeadingArtifact(value: string): string {
+  const patterns = [
+    /^(?:certainly|sure)\b[!,.][ \t]*/i,
+    /^(?:as|speaking as)\s+an?\s+(?:ai|artificial intelligence)(?:\s+(?:language model|code reviewer|reviewer|assistant))?(?:(?:\.\.\.|[,.:;!])[ \t]*|\n+\s*|$)/i,
+    /^i(?:'m| am)\s+an?\s+(?:ai|artificial intelligence)(?:\s+(?:language model|code reviewer|reviewer|assistant))?(?:(?:\.\.\.|[,.:;!])[ \t]*|\n+\s*|$)/i,
+    /^(?:here|below)\s+(?:is|are)(?:\s+(?:my|the))?\s+(?:code\s+)?(?:analysis|review|report|assessment)(?:\s+(?:result|output))?(?:\s+of\s+(?:the|this)\s+code)?(?:[:.!][ \t]*|\n+\s*|$)/i
+  ];
+  let result = value.trimStart();
+
+  for (let count = 0; count < patterns.length; count += 1) {
+    const pattern = patterns.find((candidate) => candidate.test(result));
+    if (!pattern) {
+      break;
+    }
+    result = result.replace(pattern, "").trimStart();
+  }
+
+  return result.trim();
+}
+
 export function parseReportJson(raw: string): unknown {
   const cleaned = stripWholeFence(removeUnsafeControls(raw.replace(/^\ufeff/, "").replace(/\r\n?/g, "\n")).trim());
 
@@ -78,16 +98,45 @@ function normalizeFence(value: string): string | null {
   return `\`\`\`${match[1] ?? ""}`;
 }
 
+function normalizeSeparatorCell(value: string): string {
+  const left = value.startsWith(":") ? ":" : "";
+  const right = value.endsWith(":") ? ":" : "";
+  return `${left}---${right}`;
+}
+
+function normalizeTableRows(rows: string[][]): string[] {
+  const columnCount = Math.max(...rows.map((row) => row.length));
+
+  return rows.map((row) => {
+    const separator = row.length > 0 && row.every((cell) => /^:?-+:?$/.test(cell));
+    const cells = Array.from({ length: columnCount }, (_, index) => {
+      const cell = row[index] ?? "";
+      return separator ? normalizeSeparatorCell(cell || "---") : cell;
+    });
+    return `| ${cells.join(" | ")} |`;
+  });
+}
+
 export function normalizeReportText(value: string): string {
   const lines = removeUnsafeControls(value.replace(/^\ufeff/, "").replace(/\r\n?/g, "\n")).split("\n");
   const output: string[] = [];
+  let tableRows: string[][] = [];
   let inCodeBlock = false;
   let previousWasBlank = false;
+
+  const flushTable = () => {
+    if (tableRows.length === 0) {
+      return;
+    }
+    output.push(...normalizeTableRows(tableRows));
+    tableRows = [];
+  };
 
   for (const sourceLine of lines) {
     const fence = normalizeFence(sourceLine);
     if (fence !== null) {
-      output.push(fence);
+      flushTable();
+      output.push(inCodeBlock ? "```" : fence);
       inCodeBlock = !inCodeBlock;
       previousWasBlank = false;
       continue;
@@ -100,6 +149,7 @@ export function normalizeReportText(value: string): string {
 
     const line = sourceLine.trimEnd();
     if (!line.trim()) {
+      flushTable();
       if (!previousWasBlank && output.length > 0) {
         output.push("");
       }
@@ -108,14 +158,25 @@ export function normalizeReportText(value: string): string {
     }
 
     const tableCells = splitTableRow(line);
-    output.push(tableCells ? `| ${tableCells.join(" | ")} |` : line);
+    if (tableCells) {
+      tableRows.push(tableCells);
+    } else {
+      flushTable();
+      output.push(line);
+    }
     previousWasBlank = false;
+  }
+
+  flushTable();
+
+  if (inCodeBlock) {
+    output.push("```");
   }
 
   while (output.at(-1) === "") {
     output.pop();
   }
-  return output.join("\n").trim();
+  return stripLeadingArtifact(output.join("\n"));
 }
 
 export function normalizeInlineText(value: string): string {

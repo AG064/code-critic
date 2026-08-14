@@ -2,6 +2,7 @@ import { detectLanguage, normalizeLanguageHint } from "./LanguageDetector.js";
 import {
   ANALYSIS_TYPES,
   type AnalysisType,
+  type CodeComplexity,
   type GenerationParameters,
   type NormalizedAnalysisInput,
   type QualityParameters,
@@ -102,16 +103,43 @@ function normalizeCode(value: unknown): string {
   return code;
 }
 
-function normalizeGenerationParameters(value: unknown): GenerationParameters {
+function estimateCodeComplexity(code: string, lineCount: number): CodeComplexity {
+  const codeOnly = code.replace(
+    /<!--[\s\S]*?-->|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\/\*[\s\S]*?\*\/|\/\/[^\n]*|#[^\n]*|(?:^|[ \t])--[^\n]*/gm,
+    " "
+  );
+  const branchCount = codeOnly.match(/\b(?:if|else\s+if|for|while|switch|case|catch|except|when)\b|&&|\|\|/gi)?.length ?? 0;
+  return lineCount > 300 || branchCount >= 20 ? "complex" : "standard";
+}
+
+function defaultGenerationParameters(analysisType: AnalysisType, complexity: CodeComplexity): GenerationParameters {
+  if (analysisType === "security") {
+    return complexity === "complex"
+      ? { temperature: 0.15, max_tokens: 2200, top_p: 0.85 }
+      : { temperature: 0.2, max_tokens: 1700, top_p: 0.85 };
+  }
+
+  return complexity === "complex"
+    ? { temperature: 0.25, max_tokens: 1900, top_p: 0.9 }
+    : { temperature: 0.3, max_tokens: 1500, top_p: 0.9 };
+}
+
+function normalizeGenerationParameters(
+  value: unknown,
+  analysisType: AnalysisType,
+  complexity: CodeComplexity
+): GenerationParameters {
   const source = value === undefined ? {} : value;
   if (!isRecord(source)) {
     throw new InputValidationError("invalid_generation_parameters", "generation_params", "Generation parameters must be an object.");
   }
 
+  const defaults = defaultGenerationParameters(analysisType, complexity);
+
   return {
-    temperature: readNumber(source.temperature, 0.3, 0, 1, "temperature"),
-    max_tokens: readNumber(source.max_tokens, 1500, 500, 3000, "max_tokens", true),
-    top_p: readNumber(source.top_p, 0.9, 0.1, 1, "top_p")
+    temperature: readNumber(source.temperature, defaults.temperature, 0, 1, "temperature"),
+    max_tokens: readNumber(source.max_tokens, defaults.max_tokens, 500, 3000, "max_tokens", true),
+    top_p: readNumber(source.top_p, defaults.top_p, 0.1, 1, "top_p")
   };
 }
 
@@ -151,13 +179,13 @@ function normalizeSecurityFocusAreas(value: unknown): SecurityParameters["securi
       : value;
 
   if (!Array.isArray(rawValues)) {
-    throw new InputValidationError("invalid_parameter", "security_focus_areas", "Security focus areas must be a list.");
+    throw new InputValidationError("invalid_parameter", "security_focus_areas", "Vulnerability categories must be a list.");
   }
 
   const normalized = [...new Set(rawValues.map((item) => typeof item === "string" ? item.trim().toLowerCase() : ""))];
 
   if (normalized.length === 0 || normalized.some((item) => !securityFocusAreas.includes(item as (typeof securityFocusAreas)[number]))) {
-    throw new InputValidationError("invalid_parameter", "security_focus_areas", "Security focus areas contain an unsupported value.");
+    throw new InputValidationError("invalid_parameter", "security_focus_areas", "Vulnerability categories contain an unsupported value.");
   }
 
   return normalized as SecurityParameters["security_focus_areas"];
@@ -227,12 +255,14 @@ export function normalizeAnalysisInput(value: unknown): NormalizedAnalysisInput 
     throw new InputValidationError("invalid_parameters", "parameters", "Analysis parameters must be an object.");
   }
   const parameterSource = { ...value, ...(nestedParameters ?? {}) };
-  const generationParameters = normalizeGenerationParameters(value.generation_params);
+  const complexity = estimateCodeComplexity(code, lineCount);
+  const generationParameters = normalizeGenerationParameters(value.generation_params, analysisType, complexity);
   const normalizedCode = {
     content: code,
     language,
     line_count: lineCount,
-    file_name: fileName
+    file_name: fileName,
+    complexity
   };
 
   if (analysisType === "quality") {

@@ -1,13 +1,12 @@
 import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { analyzeQuality, analyzeSecurity, ApiError } from "./api";
+import { countCodeLines, MAX_FILE_BYTES, sourceFileError } from "./codeInput";
 import { AnalysisParameters } from "./components/AnalysisParameters";
 import { ReportEditor } from "./components/ReportEditor";
 import type { AnalysisType, NormalizedInput, QualityParameters, QualityReport, SecurityParameters, SecurityReport } from "./domain";
 import { createEditableReport } from "./reportExport";
 
 type ServiceState = "checking" | "ready" | "unavailable";
-
-const MAX_FILE_BYTES = 200_000;
 
 const defaultQuality: QualityParameters = {
   strictness_level: "medium",
@@ -21,18 +20,6 @@ const defaultSecurity: SecurityParameters = {
   security_focus_areas: ["authentication", "injection", "sensitive_data"],
   threat_level: "medium"
 };
-
-function countLines(code: string): number {
-  if (code.length === 0) {
-    return 0;
-  }
-  const normalized = code.replace(/\r\n?/g, "\n");
-  const lines = normalized.split("\n");
-  if (normalized.endsWith("\n")) {
-    lines.pop();
-  }
-  return lines.length;
-}
 
 function findingLocation(lineStart: number | null, lineEnd: number | null): string {
   if (lineStart === null || lineEnd === null) {
@@ -91,7 +78,7 @@ export function App() {
     unavailable: "Unavailable"
   }[serviceState];
 
-  const lineCount = useMemo(() => countLines(code), [code]);
+  const lineCount = useMemo(() => countCodeLines(code), [code]);
   const lineCountState = lineCount >= 100 && lineCount <= 500 ? "valid" : "invalid";
 
   const handleCodeChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
@@ -112,14 +99,15 @@ export function App() {
 
     clearResult();
     if (file.size > MAX_FILE_BYTES) {
-      setMessage("The file is too large. Choose a source file under 200 KB.");
+      setMessage(sourceFileError(file.size, ""));
       return;
     }
 
     try {
       const content = await file.text();
-      if (content.includes("\u0000")) {
-        setMessage("The uploaded file must contain text source code.");
+      const fileError = sourceFileError(file.size, content);
+      if (fileError) {
+        setMessage(fileError);
         return;
       }
       setCode(content);
@@ -136,20 +124,13 @@ export function App() {
     setMessage(null);
     const requestVersion = clearResult();
 
-    const generation_params = {
-      temperature: 0.3,
-      max_tokens: 1500,
-      top_p: 0.9
-    };
-
     try {
       if (analysisType === "quality") {
         const result = await analyzeQuality({
           analysis_type: "quality",
           code_input: code,
           ...(fileName ? { file_name: fileName } : {}),
-          parameters: quality,
-          generation_params
+          parameters: quality
         });
         if (resultVersion.current !== requestVersion) {
           return;
@@ -162,8 +143,7 @@ export function App() {
           analysis_type: "security",
           code_input: code,
           ...(fileName ? { file_name: fileName } : {}),
-          parameters: security,
-          generation_params
+          parameters: security
         });
         if (resultVersion.current !== requestVersion) {
           return;
@@ -292,6 +272,10 @@ export function App() {
               <dt>Analysis</dt>
               <dd>{normalizedInput.analysis_type}</dd>
             </div>
+            <div>
+              <dt>Analysis profile</dt>
+              <dd>{normalizedInput.code.complexity}</dd>
+            </div>
           </dl>
         </section>
       )}
@@ -306,6 +290,18 @@ export function App() {
             <p>{qualityReport.summary}</p>
           </div>
 
+          <dl className="quality-metrics">
+            <div>
+              <dt>Readability</dt>
+              <dd>{qualityReport.readability_score}/100</dd>
+            </div>
+            <div>
+              <dt>Complexity</dt>
+              <dd>{qualityReport.complexity_metrics.complexity_score}/100, {qualityReport.complexity_metrics.level}</dd>
+            </div>
+          </dl>
+          <p className="metric-summary">{qualityReport.complexity_metrics.summary}</p>
+
           <h3>Findings</h3>
           {qualityReport.findings.length === 0 ? (
             <p>No findings.</p>
@@ -318,6 +314,24 @@ export function App() {
                     <span>{finding.severity} | {findingLocation(finding.line_start, finding.line_end)}</span>
                   </div>
                   <p>{finding.description}</p>
+                </li>
+              ))}
+            </ol>
+          )}
+
+          <h3>Best-practice violations</h3>
+          {qualityReport.best_practice_violations.length === 0 ? (
+            <p>No best-practice violations.</p>
+          ) : (
+            <ol className="report-list">
+              {qualityReport.best_practice_violations.map((violation, index) => (
+                <li key={`${violation.title}-${index}`}>
+                  <div className="finding-meta">
+                    <strong>{violation.title}</strong>
+                    <span>{violation.severity} | {findingLocation(violation.line_start, violation.line_end)}</span>
+                  </div>
+                  <p>{violation.description}</p>
+                  <p><strong>Recommendation:</strong> {violation.recommendation}</p>
                 </li>
               ))}
             </ol>

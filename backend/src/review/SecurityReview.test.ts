@@ -11,7 +11,8 @@ function securityInput(): Extract<NormalizedAnalysisInput, { analysis_type: "sec
       content: Array.from({ length: 100 }, (_, index) => index === 0 ? "def load_user():" : `    value_${index} = ${index}`).join("\n"),
       language: "python",
       line_count: 100,
-      file_name: "users.py"
+      file_name: "users.py",
+      complexity: "standard"
     },
     parameters: {
       security_framework: "owasp_top_10",
@@ -62,7 +63,7 @@ test("builds a security request and parses the report", async () => {
   assert.equal(report.risk_assessment.level, "high");
   assert.equal(report.vulnerabilities[0]?.severity, "high");
   assert.match(captured.request?.system ?? "", /untrusted data/);
-  assert.match(captured.request?.user ?? "", /Focus areas: authentication, injection/);
+  assert.match(captured.request?.user ?? "", /Vulnerability categories: authentication, injection/);
   assert.match(captured.request?.user ?? "", /Threat level: high/);
 });
 

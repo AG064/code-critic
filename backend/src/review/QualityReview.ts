@@ -18,11 +18,29 @@ export interface QualityRecommendation {
   description: string;
 }
 
+export interface QualityComplexityMetrics {
+  complexity_score: number;
+  level: "low" | "medium" | "high";
+  summary: string;
+}
+
+export interface BestPracticeViolation {
+  title: string;
+  severity: "low" | "medium" | "high";
+  line_start: number | null;
+  line_end: number | null;
+  description: string;
+  recommendation: string;
+}
+
 export interface QualityReport {
   analysis_type: "quality";
   score: number;
+  readability_score: number;
+  complexity_metrics: QualityComplexityMetrics;
   summary: string;
   findings: QualityFinding[];
+  best_practice_violations: BestPracticeViolation[];
   recommendations: QualityRecommendation[];
 }
 
@@ -32,6 +50,12 @@ Return one JSON object and no Markdown.
 Use this exact structure:
 {
   "score": 85,
+  "readability_score": 82,
+  "complexity_metrics": {
+    "complexity_score": 38,
+    "level": "medium",
+    "summary": "Short complexity assessment"
+  },
   "summary": "Short assessment",
   "findings": [
     {
@@ -42,6 +66,16 @@ Use this exact structure:
       "description": "What is wrong and why it matters"
     }
   ],
+  "best_practice_violations": [
+    {
+      "title": "Violation title",
+      "severity": "low|medium|high",
+      "line_start": 20,
+      "line_end": 20,
+      "description": "Which established practice is not followed",
+      "recommendation": "Specific correction"
+    }
+  ],
   "recommendations": [
     {
       "title": "Recommendation title",
@@ -49,9 +83,13 @@ Use this exact structure:
     }
   ]
 }
-The score must be an integer from 0 to 100.
-Use null for both line fields when a finding applies to the whole file.
-Return no more than 8 findings and 8 recommendations.
+The overall and readability scores must be integers from 0 to 100, where higher is better.
+The complexity score must be an integer from 0 to 100, where higher means more complex.
+Set complexity level to low for scores from 0 to 33, medium for 34 to 66, and high for 67 to 100.
+Use null for both line fields when a finding or violation applies to the whole file.
+Return no more than 8 findings, 8 best-practice violations, and 8 recommendations.
+When findings or best-practice violations are present, include at least one recommendation.
+Recommendations must address the reported issues with specific changes.
 Report only issues supported by the supplied code.
 Do not reproduce credentials or expand harmful behavior.
 Keep the report concise and professional.`;
@@ -65,6 +103,7 @@ function buildUserPrompt(input: QualityInput): string {
   return `Review this ${input.code.language} file for code quality.
 File: ${input.code.file_name}
 Line count: ${input.code.line_count}
+Input complexity: ${input.code.complexity}
 Strictness: ${input.parameters.strictness_level}
 Naming convention: ${input.parameters.naming_conventions}
 Code organization: ${input.parameters.code_organization}
@@ -113,6 +152,13 @@ function readArray(value: unknown): unknown[] {
   return value;
 }
 
+function readScore(value: unknown): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 100) {
+    return invalidReport();
+  }
+  return value;
+}
+
 function parseJson(raw: string): unknown {
   try {
     return parseReportJson(raw);
@@ -123,8 +169,13 @@ function parseJson(raw: string): unknown {
 
 export function parseQualityReport(raw: string, lineCount: number): QualityReport {
   const source = asRecord(parseJson(raw));
+  const score = readScore(source.score);
+  const readabilityScore = readScore(source.readability_score);
+  const complexity = asRecord(source.complexity_metrics);
+  const complexityScore = readScore(complexity.complexity_score);
+  const expectedComplexityLevel = complexityScore <= 33 ? "low" : complexityScore <= 66 ? "medium" : "high";
 
-  if (typeof source.score !== "number" || !Number.isInteger(source.score) || source.score < 0 || source.score > 100) {
+  if (complexity.level !== expectedComplexityLevel) {
     return invalidReport();
   }
 
@@ -157,11 +208,44 @@ export function parseQualityReport(raw: string, lineCount: number): QualityRepor
     };
   });
 
+  const bestPracticeViolations = readArray(source.best_practice_violations).map((value): BestPracticeViolation => {
+    const violation = asRecord(value);
+    const lineStart = readLine(violation.line_start, lineCount);
+    const lineEnd = readLine(violation.line_end, lineCount);
+
+    if ((lineStart === null) !== (lineEnd === null) || (lineStart !== null && lineEnd !== null && lineEnd < lineStart)) {
+      return invalidReport();
+    }
+    if (!(violation.severity === "low" || violation.severity === "medium" || violation.severity === "high")) {
+      return invalidReport();
+    }
+
+    return {
+      title: readText(violation.title, 160, true),
+      severity: violation.severity,
+      line_start: lineStart,
+      line_end: lineEnd,
+      description: readText(violation.description, 1200),
+      recommendation: readText(violation.recommendation, 1200)
+    };
+  });
+
+  if ((findings.length > 0 || bestPracticeViolations.length > 0) && recommendations.length === 0) {
+    return invalidReport();
+  }
+
   return {
     analysis_type: "quality",
-    score: source.score,
+    score,
+    readability_score: readabilityScore,
+    complexity_metrics: {
+      complexity_score: complexityScore,
+      level: expectedComplexityLevel,
+      summary: readText(complexity.summary, 1200)
+    },
     summary: readText(source.summary, 1200),
     findings,
+    best_practice_violations: bestPracticeViolations,
     recommendations
   };
 }

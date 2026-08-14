@@ -9,7 +9,8 @@ const qualityInput: NormalizedInput = {
     content: "const value = 1;\n".repeat(100).trimEnd(),
     language: "typescript",
     line_count: 100,
-    file_name: "sample.ts"
+    file_name: "sample.ts",
+    complexity: "standard"
   },
   parameters: {
     strictness_level: "medium",
@@ -27,6 +28,12 @@ test("creates an editable Quality report", () => {
   const report: QualityReport = {
     analysis_type: "quality",
     score: 82,
+    readability_score: 78,
+    complexity_metrics: {
+      complexity_score: 42,
+      level: "medium",
+      summary: "The repeated branch adds moderate complexity."
+    },
     summary: "Clear structure with one repeated branch.",
     findings: [{
       title: "Repeated branch",
@@ -34,6 +41,14 @@ test("creates an editable Quality report", () => {
       line_start: 12,
       line_end: 18,
       description: "Keep this table and example:\n\n| Case | Result |\n| --- | --- |\n| A | B |\n\n```ts\nrun();\n```"
+    }],
+    best_practice_violations: [{
+      title: "Repeated control flow",
+      severity: "medium",
+      line_start: 12,
+      line_end: 18,
+      description: "The same branch is repeated.",
+      recommendation: "Extract the shared branch into one function."
     }],
     recommendations: [{
       title: "Extract the branch",
@@ -46,6 +61,9 @@ test("creates an editable Quality report", () => {
   assert.match(result, /^# Quality report/);
   assert.match(result, /File: sample\.ts/);
   assert.match(result, /Score: 82\/100/);
+  assert.match(result, /Readability: 78\/100/);
+  assert.match(result, /Complexity: 42\/100 \(medium\)/);
+  assert.match(result, /## Best-practice violations/);
   assert.match(result, /Lines 12-18/);
   assert.match(result, /\| Case \| Result \|/);
   assert.match(result, /```ts\nrun\(\);\n```/);
@@ -111,15 +129,47 @@ test("exports the current edit as readable plain text and exact Markdown", () =>
   });
 });
 
-test("escapes edited text in a standalone HTML export", () => {
-  const payload = "</pre><script>alert(\"x\")</script>&'";
+test("exports highlighted fenced code with native interactive controls", () => {
+  const payload = [
+    "# Review",
+    "",
+    "Täpne ülevaade.",
+    "",
+    "```javascript",
+    "const answer = 42;",
+    "const label = \"safe\";",
+    "// checked",
+    "```"
+  ].join("\n");
+  const result = createExportFile(payload, "quality", "html");
+
+  assert.match(result.content, /<details open>/);
+  assert.match(result.content, /<summary>Report<\/summary>/);
+  assert.match(result.content, /<summary>Code block \(javascript\)<\/summary>/);
+  assert.match(result.content, /<span class="token keyword">const<\/span>/);
+  assert.match(result.content, /<span class="token number">42<\/span>/);
+  assert.match(result.content, /<span class="token string">&quot;safe&quot;<\/span>/);
+  assert.match(result.content, /<span class="token comment">\/\/ checked<\/span>/);
+  assert.match(result.content, /Täpne ülevaade\./);
+  assert.doesNotMatch(result.content, /```javascript/);
+});
+
+test("escapes malicious text and code in a standalone HTML export", () => {
+  const payload = [
+    "</pre></details><script>alert(\"text\")</script>&'",
+    "```html",
+    "</code></pre><script>alert(\"code\")</script>",
+    "```"
+  ].join("\n");
   const result = createExportFile(payload, "security", "html");
 
   assert.equal(result.fileName, "security-report.html");
   assert.equal(result.mimeType, "text/html;charset=utf-8");
   assert.match(result.content, /^<!doctype html>/);
-  assert.match(result.content, /Content-Security-Policy/);
-  assert.match(result.content, /&lt;\/pre&gt;&lt;script&gt;alert\(&quot;x&quot;\)&lt;\/script&gt;&amp;&#39;/);
-  assert.doesNotMatch(result.content, /<script>/);
-  assert.doesNotMatch(result.content, /<\/pre><script>/);
+  assert.match(result.content, /default-src 'none'/);
+  assert.match(result.content, /object-src 'none'/);
+  assert.match(result.content, /&lt;\/pre&gt;&lt;\/details&gt;&lt;script&gt;alert\(&quot;text&quot;\)&lt;\/script&gt;&amp;&#39;/);
+  assert.match(result.content, /&lt;\/code&gt;&lt;\/pre&gt;&lt;script&gt;alert\(<span class="token string">&quot;code&quot;<\/span>\)&lt;\/script&gt;/);
+  assert.doesNotMatch(result.content, /<script[ >]/i);
+  assert.doesNotMatch(result.content, /<link[ >]|<iframe[ >]|<object[ >]/i);
 });

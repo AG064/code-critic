@@ -24,6 +24,8 @@ export const SUPPORTED_LANGUAGES = [
 
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 
+export type CodeComplexity = "standard" | "complex";
+
 export interface GenerationParameters {
   temperature: number;
   max_tokens: number;
@@ -50,6 +52,7 @@ export interface NormalizedCode {
   language: SupportedLanguage;
   line_count: number;
   file_name: string;
+  complexity: CodeComplexity;
 }
 
 export type NormalizedAnalysisInput =

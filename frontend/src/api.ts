@@ -7,7 +7,7 @@ import {
   type SecurityFocusArea,
   type SecurityReport,
   type SecurityParameters
-} from "./domain";
+} from "./domain.ts";
 
 type ErrorResponse = {
   error?: unknown;
@@ -15,12 +15,15 @@ type ErrorResponse = {
 };
 
 export class ApiError extends Error {
+  readonly code: string;
+
   constructor(
     message: string,
-    readonly code = "request_failed"
+    code = "request_failed"
   ) {
     super(message);
     this.name = "ApiError";
+    this.code = code;
   }
 }
 
@@ -30,6 +33,27 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isAllowedValue<const T extends readonly string[]>(value: unknown, allowed: T): value is T[number] {
   return typeof value === "string" && allowed.includes(value as T[number]);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function hasValidLineRange(value: Record<string, unknown>, lineCount: number): boolean {
+  return (value.line_start === null && value.line_end === null)
+    || (typeof value.line_start === "number" && Number.isInteger(value.line_start)
+      && typeof value.line_end === "number" && Number.isInteger(value.line_end)
+      && value.line_start >= 1 && value.line_end >= value.line_start && value.line_end <= lineCount);
+}
+
+function hasMatchingComplexityLevel(score: number, level: unknown): boolean {
+  if (score <= 33) {
+    return level === "low";
+  }
+  if (score <= 66) {
+    return level === "medium";
+  }
+  return level === "high";
 }
 
 function isQualityParameters(value: unknown): value is QualityParameters {
@@ -82,6 +106,7 @@ function isNormalizedInput(value: unknown): value is NormalizedInput {
     && value.code.line_count <= 500
     && typeof value.code.file_name === "string"
     && value.code.file_name.length > 0
+    && isAllowedValue(value.code.complexity, ["standard", "complex"] as const)
     && typeof value.generation_params.temperature === "number"
     && Number.isFinite(value.generation_params.temperature)
     && value.generation_params.temperature >= 0
@@ -96,8 +121,10 @@ function isNormalizedInput(value: unknown): value is NormalizedInput {
     && value.generation_params.top_p <= 1;
 }
 
-function isQualityReport(value: unknown): value is QualityReport {
-  if (!isRecord(value) || value.analysis_type !== "quality" || !Array.isArray(value.findings) || !Array.isArray(value.recommendations)) {
+function isQualityReport(value: unknown, lineCount: number): value is QualityReport {
+  if (!isRecord(value) || value.analysis_type !== "quality" || !isRecord(value.complexity_metrics)
+    || !Array.isArray(value.findings) || !Array.isArray(value.best_practice_violations)
+    || !Array.isArray(value.recommendations)) {
     return false;
   }
 
@@ -105,33 +132,54 @@ function isQualityReport(value: unknown): value is QualityReport {
     if (!isRecord(item)) {
       return false;
     }
-    const validLines = (item.line_start === null && item.line_end === null)
-      || (typeof item.line_start === "number" && Number.isInteger(item.line_start)
-        && typeof item.line_end === "number" && Number.isInteger(item.line_end)
-        && item.line_start >= 1 && item.line_end >= item.line_start);
-
-    return typeof item.title === "string"
+    return isNonEmptyString(item.title)
       && isAllowedValue(item.severity, ["low", "medium", "high"] as const)
-      && validLines
-      && typeof item.description === "string";
+      && hasValidLineRange(item, lineCount)
+      && isNonEmptyString(item.description);
   });
 
   const validRecommendations = value.recommendations.every((item) => isRecord(item)
-    && typeof item.title === "string"
-    && typeof item.description === "string");
+    && isNonEmptyString(item.title)
+    && isNonEmptyString(item.description));
+
+  const validViolations = value.best_practice_violations.every((item) => {
+    if (!isRecord(item)) {
+      return false;
+    }
+    return isNonEmptyString(item.title)
+      && isAllowedValue(item.severity, ["low", "medium", "high"] as const)
+      && hasValidLineRange(item, lineCount)
+      && isNonEmptyString(item.description)
+      && isNonEmptyString(item.recommendation);
+  });
 
   return typeof value.score === "number"
     && Number.isInteger(value.score)
     && value.score >= 0
     && value.score <= 100
-    && typeof value.summary === "string"
+    && typeof value.readability_score === "number"
+    && Number.isInteger(value.readability_score)
+    && value.readability_score >= 0
+    && value.readability_score <= 100
+    && typeof value.complexity_metrics.complexity_score === "number"
+    && Number.isInteger(value.complexity_metrics.complexity_score)
+    && value.complexity_metrics.complexity_score >= 0
+    && value.complexity_metrics.complexity_score <= 100
+    && isAllowedValue(value.complexity_metrics.level, ["low", "medium", "high"] as const)
+    && hasMatchingComplexityLevel(value.complexity_metrics.complexity_score, value.complexity_metrics.level)
+    && isNonEmptyString(value.complexity_metrics.summary)
+    && isNonEmptyString(value.summary)
     && value.findings.length <= 8
+    && value.best_practice_violations.length <= 8
     && value.recommendations.length <= 8
     && validFindings
-    && validRecommendations;
+    && validViolations
+    && validRecommendations
+    && ((value.findings.length === 0 && value.best_practice_violations.length === 0)
+      || value.recommendations.length > 0);
 }
 
-function isSecurityReport(value: unknown): value is SecurityReport {
+function isSecurityReport(value: unknown, lineCount: number): value is SecurityReport {
   if (!isRecord(value) || value.analysis_type !== "security" || !isRecord(value.risk_assessment)
     || !Array.isArray(value.vulnerabilities) || !Array.isArray(value.mitigations)) {
     return false;
@@ -142,25 +190,20 @@ function isSecurityReport(value: unknown): value is SecurityReport {
     if (!isRecord(item)) {
       return false;
     }
-    const validLines = (item.line_start === null && item.line_end === null)
-      || (typeof item.line_start === "number" && Number.isInteger(item.line_start)
-        && typeof item.line_end === "number" && Number.isInteger(item.line_end)
-        && item.line_start >= 1 && item.line_end >= item.line_start);
-
-    return typeof item.title === "string"
+    return isNonEmptyString(item.title)
       && isAllowedValue(item.severity, riskLevels)
-      && typeof item.category === "string"
-      && validLines
-      && typeof item.description === "string"
-      && typeof item.mitigation === "string";
+      && isNonEmptyString(item.category)
+      && hasValidLineRange(item, lineCount)
+      && isNonEmptyString(item.description)
+      && isNonEmptyString(item.mitigation);
   });
 
   const validMitigations = value.mitigations.every((item) => isRecord(item)
-    && typeof item.title === "string"
-    && typeof item.description === "string");
+    && isNonEmptyString(item.title)
+    && isNonEmptyString(item.description));
 
   return isAllowedValue(value.risk_assessment.level, riskLevels)
-    && typeof value.risk_assessment.summary === "string"
+    && isNonEmptyString(value.risk_assessment.summary)
     && value.vulnerabilities.length <= 8
     && value.mitigations.length <= 8
     && validVulnerabilities
@@ -213,7 +256,9 @@ export async function analyzeQuality(
   payload: Extract<AnalysisRequest, { analysis_type: "quality" }>
 ): Promise<{ normalizedInput: NormalizedInput; report: QualityReport }> {
   const body = await postJson("/api/analyze", payload, 58_000);
-  if (!isRecord(body) || !isNormalizedInput(body.normalized_input) || !isQualityReport(body.report)) {
+  if (!isRecord(body) || !isNormalizedInput(body.normalized_input)
+    || body.normalized_input.analysis_type !== "quality"
+    || !isQualityReport(body.report, body.normalized_input.code.line_count)) {
     throw new ApiError("The service returned an invalid response.", "invalid_response");
   }
   return { normalizedInput: body.normalized_input, report: body.report };
@@ -223,7 +268,9 @@ export async function analyzeSecurity(
   payload: Extract<AnalysisRequest, { analysis_type: "security" }>
 ): Promise<{ normalizedInput: NormalizedInput; report: SecurityReport }> {
   const body = await postJson("/api/analyze", payload, 58_000);
-  if (!isRecord(body) || !isNormalizedInput(body.normalized_input) || !isSecurityReport(body.report)) {
+  if (!isRecord(body) || !isNormalizedInput(body.normalized_input)
+    || body.normalized_input.analysis_type !== "security"
+    || !isSecurityReport(body.report, body.normalized_input.code.line_count)) {
     throw new ApiError("The service returned an invalid response.", "invalid_response");
   }
   return { normalizedInput: body.normalized_input, report: body.report };

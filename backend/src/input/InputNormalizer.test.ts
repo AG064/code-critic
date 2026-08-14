@@ -22,7 +22,8 @@ test("normalizes a quality request with stable defaults", () => {
     content: pythonLines(100),
     language: "python",
     line_count: 100,
-    file_name: "review.py"
+    file_name: "review.py",
+    complexity: "standard"
   });
   assert.deepEqual(result.parameters, {
     strictness_level: "medium",
@@ -77,6 +78,79 @@ test("normalizes security parameters and removes duplicate focus areas", () => {
     severity_threshold: "high",
     security_focus_areas: ["injection", "authentication"],
     threat_level: "high"
+  });
+  assert.deepEqual(result.generation_params, {
+    temperature: 0.2,
+    max_tokens: 1700,
+    top_p: 0.85
+  });
+});
+
+test("uses the control-flow boundary for a complex Quality profile", () => {
+  const standardCode = Array.from({ length: 100 }, (_, index) => index < 19 ? `if value_${index}:` : `value_${index} = ${index}`).join("\n");
+  const complexCode = Array.from({ length: 100 }, (_, index) => index < 20 ? `if value_${index}:` : `value_${index} = ${index}`).join("\n");
+  const standard = normalizeAnalysisInput({
+    analysis_type: "quality",
+    code_input: standardCode,
+    file_name: "review.py"
+  });
+  const complex = normalizeAnalysisInput({
+    analysis_type: "quality",
+    code_input: complexCode,
+    file_name: "review.py"
+  });
+
+  assert.equal(standard.code.complexity, "standard");
+  assert.equal(complex.code.complexity, "complex");
+  assert.deepEqual(complex.generation_params, {
+    temperature: 0.25,
+    max_tokens: 1900,
+    top_p: 0.9
+  });
+});
+
+test("ignores control-flow words in comments and strings", () => {
+  const code = Array.from({ length: 100 }, (_, index) => index < 20
+    ? `const label_${index} = "if for while"; // if switch case`
+    : `const value_${index} = ${index};`).join("\n");
+  const result = normalizeAnalysisInput({
+    analysis_type: "quality",
+    code_input: code,
+    file_name: "review.js"
+  });
+
+  assert.equal(result.code.complexity, "standard");
+});
+
+test("matches control-flow signals without case sensitivity", () => {
+  const code = Array.from({ length: 100 }, (_, index) => index < 20 ? `IF ready_${index} THEN` : `SELECT ${index};`).join("\n");
+  const result = normalizeAnalysisInput({
+    analysis_type: "quality",
+    code_input: code,
+    file_name: "review.sql"
+  });
+
+  assert.equal(result.code.complexity, "complex");
+});
+
+test("uses the line boundary and Security complex profile", () => {
+  const standard = normalizeAnalysisInput({
+    analysis_type: "security",
+    code_input: pythonLines(300),
+    file_name: "review.py"
+  });
+  const complex = normalizeAnalysisInput({
+    analysis_type: "security",
+    code_input: pythonLines(301),
+    file_name: "review.py"
+  });
+
+  assert.equal(standard.code.complexity, "standard");
+  assert.equal(complex.code.complexity, "complex");
+  assert.deepEqual(complex.generation_params, {
+    temperature: 0.15,
+    max_tokens: 2200,
+    top_p: 0.85
   });
 });
 

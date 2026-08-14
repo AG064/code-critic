@@ -81,7 +81,9 @@ test("stops after a failed repair", async () => {
 
   await assert.rejects(
     () => runReview(client, request, parse),
-    (error: unknown) => error instanceof ReviewError && error.code === "report_repair_failed"
+    (error: unknown) => error instanceof ReviewError
+      && error.code === "report_repair_failed"
+      && /required sections and metrics/i.test(error.message)
   );
   assert.equal(calls, 2);
 });

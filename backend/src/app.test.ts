@@ -29,8 +29,15 @@ async function withServer(action: (baseUrl: string) => Promise<void>, app: Expre
 const qualityReport: QualityReport = {
   analysis_type: "quality",
   score: 90,
+  readability_score: 88,
+  complexity_metrics: {
+    complexity_score: 24,
+    level: "low",
+    summary: "The control flow is straightforward."
+  },
   summary: "The code is consistent.",
   findings: [],
+  best_practice_violations: [],
   recommendations: []
 };
 

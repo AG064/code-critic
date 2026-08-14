@@ -72,9 +72,10 @@ function buildUserPrompt(input: SecurityInput): string {
   return `Review this ${input.code.language} file for security vulnerabilities.
 File: ${input.code.file_name}
 Line count: ${input.code.line_count}
+Input complexity: ${input.code.complexity}
 Security framework: ${input.parameters.security_framework}
 Severity threshold: ${input.parameters.severity_threshold}
-Focus areas: ${input.parameters.security_focus_areas.join(", ")}
+Vulnerability categories: ${input.parameters.security_focus_areas.join(", ")}
 Threat level: ${input.parameters.threat_level}
 
 SOURCE CODE START
