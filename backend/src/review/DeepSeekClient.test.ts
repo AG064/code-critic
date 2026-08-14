@@ -53,6 +53,55 @@ test("maps rate limits to a clear error", async () => {
   );
 });
 
+test("maps authentication failures to a clear error", async () => {
+  const fetcher: typeof fetch = async () => new Response(null, { status: 401 });
+  const client = new DeepSeekClient(config, fetcher);
+
+  await assert.rejects(
+    () => client.completeJson({ system: "Return JSON.", user: "Review code.", generation }),
+    (error: unknown) => error instanceof ReviewError
+      && error.code === "provider_authentication_failed"
+      && error.status === 503
+  );
+});
+
+test("maps provider outages to a clear error", async () => {
+  const fetcher: typeof fetch = async () => new Response(null, { status: 503 });
+  const client = new DeepSeekClient(config, fetcher);
+
+  await assert.rejects(
+    () => client.completeJson({ system: "Return JSON.", user: "Review code.", generation }),
+    (error: unknown) => error instanceof ReviewError
+      && error.code === "provider_unavailable"
+      && error.status === 503
+  );
+});
+
+test("rejects malformed provider JSON", async () => {
+  const fetcher: typeof fetch = async () => new Response("not JSON", {
+    status: 200,
+    headers: { "Content-Type": "application/json" }
+  });
+  const client = new DeepSeekClient(config, fetcher);
+
+  await assert.rejects(
+    () => client.completeJson({ system: "Return JSON.", user: "Review code.", generation }),
+    (error: unknown) => error instanceof ReviewError && error.code === "provider_invalid_response"
+  );
+});
+
+test("rejects empty provider output", async () => {
+  const fetcher: typeof fetch = async () => new Response(JSON.stringify({
+    choices: [{ finish_reason: "stop", message: { content: "   " } }]
+  }), { status: 200, headers: { "Content-Type": "application/json" } });
+  const client = new DeepSeekClient(config, fetcher);
+
+  await assert.rejects(
+    () => client.completeJson({ system: "Return JSON.", user: "Review code.", generation }),
+    (error: unknown) => error instanceof ReviewError && error.code === "provider_invalid_response"
+  );
+});
+
 test("rejects incomplete provider output", async () => {
   const fetcher: typeof fetch = async () => new Response(JSON.stringify({
     choices: [{ finish_reason: "length", message: { content: "{}" } }]

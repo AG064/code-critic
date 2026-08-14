@@ -52,7 +52,7 @@ test("creates an editable Quality report", () => {
   assert.match(result, /## Recommendations/);
 });
 
-test("creates an empty Security report without placeholder sections missing", () => {
+test("includes empty sections in a Security report", () => {
   const input: NormalizedInput = {
     ...qualityInput,
     analysis_type: "security",

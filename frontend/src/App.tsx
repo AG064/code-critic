@@ -224,7 +224,7 @@ export function App() {
             />
           </label>
           <div className="code-meta">
-            <span data-state={lineCountState}>{lineCount} lines</span>
+            <span data-state={lineCountState}>{lineCount} {lineCount === 1 ? "line" : "lines"}</span>
             <span>100 to 500 required</span>
           </div>
         </section>
@@ -268,16 +268,16 @@ export function App() {
         {message && <p className="message error" role="alert">{message}</p>}
 
         <div className="action-row">
-          <p>Code stays in this request and is not saved.</p>
+          <p>Code is sent to DeepSeek for this review. Code Critic does not save it.</p>
           <button type="submit" disabled={submitting}>
-            {submitting ? "Working" : analysisType === "quality" ? "Analyze quality" : "Analyze security"}
+            {submitting ? "Analyzing" : analysisType === "quality" ? "Analyze quality" : "Analyze security"}
           </button>
         </div>
       </form>
 
       {normalizedInput && (
         <section className="input-result" aria-live="polite">
-          <p className="step-label">Input ready</p>
+          <p className="step-label">Input details</p>
           <h2>{normalizedInput.code.language}</h2>
           <dl>
             <div>

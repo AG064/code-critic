@@ -64,6 +64,8 @@ Quality and Security reviews use `deepseek-v4-flash` through the DeepSeek chat c
 
 Quality and Security have separate prompt templates and report schemas. Both are zero-shot: each prompt defines its report fields and includes a JSON format example, but neither includes an example code review. This reduces prompt size and avoids copying example findings into a report.
 
+The configured model supports the required JSON request format and completed live checks within the 60-second target. Temperature `0.3` limits variation, `top_p: 0.9` keeps the review focused, and `max_tokens: 1500` is enough for the bounded report while limiting response time.
+
 Quality output contains a score, summary, findings, and recommendations. Security output contains a risk assessment, vulnerabilities, severity levels, and mitigations. Invalid or incomplete responses are rejected.
 
 ## Report handling
@@ -72,7 +74,7 @@ The backend removes response wrappers, normalizes spacing, code fences, and tabl
 
 If the first response is incomplete or does not match its report schema, the backend makes one corrective request. It does not retry configuration, authentication, rate limit, timeout, or service availability errors. The two request time budgets keep this bounded path below the client timeout.
 
-The editable report exists only in browser memory. Plain text and Markdown downloads contain the current editor text. HTML downloads contain the same text in a standalone escaped document with no scripts or external resources.
+The editable report exists only in browser memory. Markdown contains the current editor text. Plain text removes Markdown markers while keeping the report content. HTML contains the editor text in a standalone escaped document with no scripts or external resources.
 
 ## Checks
 
@@ -95,6 +97,4 @@ Code Critic has no accounts, sessions, database, or persistent code storage. Rev
 
 - Container health checks
 - Client-side file size checks
-- A 12-second timeout for input checks
 - Structured validation error codes
-- Editable local report export

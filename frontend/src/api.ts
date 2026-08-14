@@ -209,14 +209,6 @@ async function postJson(path: string, payload: AnalysisRequest, timeoutMs: numbe
   }
 }
 
-export async function normalizeInput(payload: AnalysisRequest): Promise<NormalizedInput> {
-  const body = await postJson("/api/normalize", payload, 12_000);
-  if (!isRecord(body) || !isNormalizedInput(body.normalized_input)) {
-    throw new ApiError("The service returned an invalid response.", "invalid_response");
-  }
-  return body.normalized_input;
-}
-
 export async function analyzeQuality(
   payload: Extract<AnalysisRequest, { analysis_type: "quality" }>
 ): Promise<{ normalizedInput: NormalizedInput; report: QualityReport }> {
