@@ -289,6 +289,17 @@ button:disabled {
   opacity: 0.65;
 }
 
+.secondary-button {
+  min-width: 0;
+  border-color: #7b7e80;
+  background: #fff;
+  color: #253846;
+}
+
+.secondary-button:hover:not(:disabled) {
+  background: #e8e9e5;
+}
+
 .input-result {
   margin-top: 34px;
   padding-top: 28px;
@@ -377,6 +388,63 @@ button:disabled {
   text-transform: capitalize;
 }
 
+.report-editor {
+  margin-top: 40px;
+  padding-top: 32px;
+  border-top: 2px solid #272a2d;
+}
+
+.report-editor h2 {
+  margin-bottom: 8px;
+}
+
+.editor-note {
+  margin-bottom: 24px;
+  color: #5b5e62;
+}
+
+.report-field {
+  display: grid;
+  gap: 8px;
+  color: #45484c;
+  font-size: 0.88rem;
+  font-weight: 650;
+}
+
+.report-textarea {
+  min-height: 390px;
+}
+
+.export-controls {
+  margin: 20px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.export-controls legend {
+  margin-bottom: 10px;
+  color: #45484c;
+  font-size: 0.88rem;
+  font-weight: 650;
+}
+
+.export-controls > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.export-controls button:disabled {
+  cursor: not-allowed;
+}
+
+.export-status {
+  min-height: 1.4em;
+  margin: 10px 0 0;
+  color: #55595d;
+  font-size: 0.86rem;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -424,5 +492,9 @@ button:disabled {
 
   button {
     width: 100%;
+  }
+
+  .export-controls > div {
+    display: grid;
   }
 }

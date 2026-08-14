@@ -1,7 +1,9 @@
-import { type ChangeEvent, type FormEvent, useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { analyzeQuality, analyzeSecurity, ApiError } from "./api";
 import { AnalysisParameters } from "./components/AnalysisParameters";
+import { ReportEditor } from "./components/ReportEditor";
 import type { AnalysisType, NormalizedInput, QualityParameters, QualityReport, SecurityParameters, SecurityReport } from "./domain";
+import { createEditableReport } from "./reportExport";
 
 type ServiceState = "checking" | "ready" | "unavailable";
 
@@ -49,8 +51,19 @@ export function App() {
   const [normalizedInput, setNormalizedInput] = useState<NormalizedInput | null>(null);
   const [qualityReport, setQualityReport] = useState<QualityReport | null>(null);
   const [securityReport, setSecurityReport] = useState<SecurityReport | null>(null);
+  const [editableReport, setEditableReport] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const resultVersion = useRef(0);
+
+  const clearResult = () => {
+    resultVersion.current += 1;
+    setNormalizedInput(null);
+    setQualityReport(null);
+    setSecurityReport(null);
+    setEditableReport("");
+    return resultVersion.current;
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -84,9 +97,7 @@ export function App() {
   const handleCodeChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     setCode(event.target.value);
     setFileName("");
-    setNormalizedInput(null);
-    setQualityReport(null);
-    setSecurityReport(null);
+    clearResult();
     setMessage(null);
   };
 
@@ -99,9 +110,7 @@ export function App() {
       return;
     }
 
-    setNormalizedInput(null);
-    setQualityReport(null);
-    setSecurityReport(null);
+    clearResult();
     if (file.size > MAX_FILE_BYTES) {
       setMessage("The file is too large. Choose a source file under 200 KB.");
       return;
@@ -125,9 +134,7 @@ export function App() {
     event.preventDefault();
     setSubmitting(true);
     setMessage(null);
-    setNormalizedInput(null);
-    setQualityReport(null);
-    setSecurityReport(null);
+    const requestVersion = clearResult();
 
     const generation_params = {
       temperature: 0.3,
@@ -144,8 +151,12 @@ export function App() {
           parameters: quality,
           generation_params
         });
+        if (resultVersion.current !== requestVersion) {
+          return;
+        }
         setNormalizedInput(result.normalizedInput);
         setQualityReport(result.report);
+        setEditableReport(createEditableReport(result.normalizedInput, result.report));
       } else {
         const result = await analyzeSecurity({
           analysis_type: "security",
@@ -154,11 +165,17 @@ export function App() {
           parameters: security,
           generation_params
         });
+        if (resultVersion.current !== requestVersion) {
+          return;
+        }
         setNormalizedInput(result.normalizedInput);
         setSecurityReport(result.report);
+        setEditableReport(createEditableReport(result.normalizedInput, result.report));
       }
     } catch (error) {
-      setMessage(error instanceof ApiError ? error.message : "The request could not be completed.");
+      if (resultVersion.current === requestVersion) {
+        setMessage(error instanceof ApiError ? error.message : "The request could not be completed.");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -222,9 +239,7 @@ export function App() {
               value={analysisType}
               onChange={(event) => {
                 setAnalysisType(event.target.value as AnalysisType);
-                setNormalizedInput(null);
-                setQualityReport(null);
-                setSecurityReport(null);
+                clearResult();
                 setMessage(null);
               }}
             >
@@ -239,16 +254,12 @@ export function App() {
             security={security}
             onQualityChange={(value) => {
               setQuality(value);
-              setNormalizedInput(null);
-              setQualityReport(null);
-              setSecurityReport(null);
+              clearResult();
               setMessage(null);
             }}
             onSecurityChange={(value) => {
               setSecurity(value);
-              setNormalizedInput(null);
-              setQualityReport(null);
-              setSecurityReport(null);
+              clearResult();
               setMessage(null);
             }}
           />
@@ -371,6 +382,14 @@ export function App() {
             </ol>
           )}
         </section>
+      )}
+
+      {normalizedInput && (qualityReport || securityReport) && (
+        <ReportEditor
+          analysisType={normalizedInput.analysis_type}
+          value={editableReport}
+          onChange={setEditableReport}
+        />
       )}
     </main>
   );

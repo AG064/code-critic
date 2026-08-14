@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import type { GenerationParameters } from "../input/types.js";
 
 export class ReviewError extends Error {
@@ -31,9 +32,31 @@ export interface JsonCompletionClient {
 
 function readConfig(): DeepSeekConfig {
   const timeoutMs = Number.parseInt(process.env.DEEPSEEK_TIMEOUT_MS ?? "55000", 10);
+  const keyFile = process.env.DEEPSEEK_API_KEY_FILE?.trim();
+  let apiKey = "";
+
+  if (keyFile) {
+    try {
+      const fileContent = readFileSync(keyFile, "utf8").trim();
+      const envMatch = fileContent.match(/^(?:export\s+)?DEEPSEEK_API_KEY\s*=\s*(.*)$/m);
+
+      if (envMatch) {
+        const value = envMatch[1]?.trim() ?? "";
+        const quoted = (value.startsWith("\"") && value.endsWith("\""))
+          || (value.startsWith("'") && value.endsWith("'"));
+        apiKey = quoted ? value.slice(1, -1).trim() : value;
+      } else if (!/[\r\n]/.test(fileContent)) {
+        apiKey = fileContent;
+      }
+    } catch {
+      apiKey = "";
+    }
+  } else {
+    apiKey = process.env.DEEPSEEK_API_KEY?.trim() ?? "";
+  }
 
   return {
-    apiKey: process.env.DEEPSEEK_API_KEY?.trim() ?? "",
+    apiKey,
     baseUrl: process.env.DEEPSEEK_BASE_URL?.trim() || "https://api.deepseek.com",
     model: process.env.DEEPSEEK_MODEL?.trim() || "deepseek-v4-flash",
     timeoutMs

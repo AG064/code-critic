@@ -19,6 +19,7 @@ Docker is the only required dependency.
 4. Open `http://localhost:27350`.
 
 The health endpoint is available at `http://localhost:27351/health`.
+Compose mounts the ignored local `.env` file into the backend as a read-only secret. The backend reads only `DEEPSEEK_API_KEY`, and the key is not placed in the container environment.
 
 ## Usage
 
@@ -26,6 +27,7 @@ The health endpoint is available at `http://localhost:27351/health`.
 2. Select Quality or Security and adjust the displayed parameters.
 3. Select **Analyze quality** or **Analyze security**.
 4. Review the detected language, line count, file name, and result.
+5. Edit the report if needed, then export it as plain text, Markdown, or HTML.
 
 Quality input includes strictness, naming convention, and code organization settings. Security input includes a framework, severity threshold, focus areas, and threat level.
 
@@ -70,17 +72,20 @@ The backend removes response wrappers, normalizes spacing, code fences, and tabl
 
 If the first response is incomplete or does not match its report schema, the backend makes one corrective request. It does not retry configuration, authentication, rate limit, timeout, or service availability errors. The two request time budgets keep this bounded path below the client timeout.
 
+The editable report exists only in browser memory. Plain text and Markdown downloads contain the current editor text. HTML downloads contain the same text in a standalone escaped document with no scripts or external resources.
+
 ## Checks
 
 Run the backend test target and verify the complete Docker configuration:
 
 ```sh
 docker build --target test -t code-critic-backend-test ./backend
-docker compose config
+docker build --target test -t code-critic-frontend-test ./frontend
+docker compose config --quiet
 docker compose build
 ```
 
-The backend tests cover language detection, boundary validation, normalization defaults, malformed input, report validation, post-processing, bounded repair, and HTTP error responses.
+The backend tests cover language detection, boundary validation, normalization defaults, malformed input, report validation, post-processing, bounded repair, provider configuration, and HTTP error responses. Frontend tests cover report serialization and safe export content.
 
 ## Privacy
 
@@ -92,3 +97,4 @@ Code Critic has no accounts, sessions, database, or persistent code storage. Rev
 - Client-side file size checks
 - A 12-second timeout for input checks
 - Structured validation error codes
+- Editable local report export
