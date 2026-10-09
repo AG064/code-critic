@@ -9,7 +9,7 @@
     "test": "npm run build && node --test dist/*.test.js dist/input/*.test.js dist/review/*.test.js"
   },
   "dependencies": {
-    "express": "^5.1.0"
+    "express": "^5.2.1"
   },
   "devDependencies": {
     "@types/express": "^5.0.3",
